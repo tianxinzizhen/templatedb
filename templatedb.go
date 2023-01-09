@@ -4,8 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"fmt"
+	"reflect"
+	"runtime"
 	"strings"
 
+	"github.com/tianxinzizhen/templatedb/load"
 	"github.com/tianxinzizhen/templatedb/load/xml"
 	"github.com/tianxinzizhen/templatedb/template"
 )
@@ -14,6 +18,15 @@ type DefaultDB struct {
 	sqlDB                   *sql.DB
 	template                map[string]*template.Template
 	delimsLeft, delimsRight string
+}
+
+func getSkipFuncName(skip int, name []any) string {
+	if len(name) > 0 && reflect.TypeOf(name[0]).Kind() == reflect.Func {
+		return fmt.Sprintf("%s:%s", runtime.FuncForPC(reflect.ValueOf(name[0]).Pointer()).Name(), fmt.Sprint(name[1:]...))
+	}
+	pc, _, _, _ := runtime.Caller(skip)
+	funcName := runtime.FuncForPC(pc).Name()
+	return fmt.Sprintf("%s:%s", funcName, fmt.Sprint(name...))
 }
 
 func Delims(delimsLeft, delimsRight string) func(*DefaultDB) {
@@ -51,7 +64,7 @@ func NewDefaultDB(SqlDB *sql.DB, options ...func(*DefaultDB) error) (*DefaultDB,
 	return db, nil
 }
 
-func (db *DefaultDB) parse(parse string, addParseTrees ...func(*template.Template) error) (*template.Template, error) {
+func (db *DefaultDB) parse(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error) {
 	templateSql, err := template.New("").Delims(db.delimsLeft, db.delimsRight).Funcs(sqlfunc).Parse(parse)
 	if err != nil {
 		return nil, err
@@ -80,7 +93,8 @@ func (db *DefaultDB) templateBuild(query string, params any) (sql string, args [
 	return templateSql.ExecuteBuilder(params)
 }
 
-func (db *DefaultDB) Exec(statement string, params any) (lastInsertId, rowsAffected int, err error) {
+func (db *DefaultDB) Exec(params any, name ...any) (lastInsertId, rowsAffected int, err error) {
+	statement := getSkipFuncName(2, name)
 	sql, args, err := db.templateBuild(statement, params)
 	if err != nil {
 		return
@@ -99,30 +113,6 @@ func (db *DefaultDB) Exec(statement string, params any) (lastInsertId, rowsAffec
 	}
 	return int(lastid), int(affected), nil
 }
-
-func (db *DefaultDB) ExecMulti(statement string, param any) (rowsAffected int, err error) {
-	sqls := strings.Split(statement, ";")
-	for _, sql := range sqls {
-		if len(strings.Trim(sql, "\t\n\f\r ")) == 0 {
-			continue
-		}
-		execSql, args, err := db.templateBuild(sql, param)
-		if err != nil {
-			return 0, err
-		}
-		result, err := db.sqlDB.Exec(execSql, args)
-		if err != nil {
-			return 0, err
-		}
-		itemAffected, err := result.RowsAffected()
-		if err != nil {
-			return 0, err
-		}
-		rowsAffected += int(itemAffected)
-	}
-	return 0, nil
-}
-
 func (db *DefaultDB) Begin() (*TemplateTxDB, error) {
 	tx, err := db.sqlDB.Begin()
 	if err != nil {
@@ -158,7 +148,8 @@ func (tx *TemplateTxDB) AutoCommit(err *error) {
 	}
 }
 
-func (tx *TemplateTxDB) Exec(statement string, params any) (lastInsertId, rowsAffected int, err error) {
+func (tx *TemplateTxDB) Exec(params any, name ...any) (lastInsertId, rowsAffected int, err error) {
+	statement := getSkipFuncName(2, name)
 	sql, args, err := tx.db.templateBuild(statement, params)
 	if err != nil {
 		return
@@ -178,15 +169,16 @@ func (tx *TemplateTxDB) Exec(statement string, params any) (lastInsertId, rowsAf
 	return int(lastid), int(affected), nil
 }
 
-func (tx *TemplateTxDB) ExecMulti(statement string, param any) (rowsAffected int, err error) {
-	sqls := strings.Split(statement, ";")
+func (tx *TemplateTxDB) ExecMulti(param any, name ...any) (rowsAffected int, err error) {
+	statement := getSkipFuncName(2, name)
+	execSql, args, err := tx.db.templateBuild(statement, param)
+	if err != nil {
+		return 0, err
+	}
+	sqls := strings.Split(execSql, ";")
 	for _, sql := range sqls {
 		if len(strings.Trim(sql, "\t\n\f\r ")) == 0 {
 			continue
-		}
-		execSql, args, err := tx.db.templateBuild(sql, param)
-		if err != nil {
-			return 0, err
 		}
 		result, err := tx.tx.Exec(execSql, args...)
 		if err != nil {
@@ -201,7 +193,8 @@ func (tx *TemplateTxDB) ExecMulti(statement string, param any) (rowsAffected int
 	return 0, nil
 }
 
-func (tx *TemplateTxDB) PrepareBatch(statement string, params ...any) (rowsAffected int, err error) {
+func (tx *TemplateTxDB) PrepareExec(params []any, name ...any) (rowsAffected int, err error) {
+	statement := getSkipFuncName(2, name)
 	var stmtMaps map[string]*sql.Stmt = make(map[string]*sql.Stmt)
 	var tempSql string
 	for _, param := range params {

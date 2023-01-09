@@ -32,6 +32,13 @@ func getDB() (*templatedb.DefaultDB, error) {
 	return templatedb.NewDefaultDB(sqldb, templatedb.LoadSqlOfXml(sqlDir))
 }
 
+func TestGetDb(t *testing.T) {
+	_, err := getDB()
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 var testParam = []struct {
 	name  string
 	param any
@@ -40,6 +47,7 @@ var testParam = []struct {
 		Name:  "0店铺1",
 		Phone: "12345678910",
 	}},
+	{name: "selectAtsign", param: nil},
 	{name: "sqlparam", param: GoodShop{
 		Name: "0店铺1",
 	}},
@@ -47,7 +55,7 @@ var testParam = []struct {
 		Name: "0店铺1",
 	}},
 	{name: "", param: GoodShop{
-		Name: "0店铺1",
+		Name: "3店铺1",
 	}},
 }
 
@@ -56,13 +64,13 @@ func TestSelect(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	for _, tp := range testParam[0:1] {
-		ret, err := templatedb.DBSelect[GoodShop](db).Select(templatedb.GetCallerFuncName(tp.name), tp.param)
+	for _, tp := range testParam[4:5] {
+		ret, err := templatedb.DBSelect[GoodShop](db).Select(tp.param, tp.name)
 		if err != nil {
 			t.Error(err)
 		}
 		for _, v := range ret {
-			fmt.Printf("%#v", v)
+			fmt.Printf("%#v\n", v)
 		}
 	}
 }
@@ -86,7 +94,7 @@ func TestInFunction(t *testing.T) {
 		t.Error(err)
 	}
 	for _, tp := range TestInFunctionParams {
-		ret, err := templatedb.DBSelect[GoodShop](db).Select(templatedb.GetCallerFuncName(tp.name), tp.param)
+		ret, err := templatedb.DBSelect[GoodShop](db).Select(tp.param, tp.name)
 		if err != nil {
 			t.Error(err)
 		}
@@ -148,7 +156,7 @@ func TestInsert(t *testing.T) {
 		t.Error(err)
 	}
 	for _, tp := range TestInsertParams {
-		lastInsertId, rowsAffected, err := db.Exec(templatedb.GetCallerFuncName(tp.name), tp.param)
+		lastInsertId, rowsAffected, err := db.Exec(tp.param, tp.name)
 		if err != nil {
 			t.Error(err)
 		}
@@ -165,7 +173,7 @@ func TestInsertTx(t *testing.T) {
 		var txfunc = func() {
 			tx, err := db.Begin()
 			defer tx.AutoCommit(&err)
-			lastInsertId, rowsAffected, err := tx.Exec(templatedb.GetFuncNameOfFunction(TestInsert, tp.name), tp.param)
+			lastInsertId, rowsAffected, err := tx.Exec(tp.param, TestInsert, tp.name)
 			if err != nil {
 				t.Error(err)
 			}

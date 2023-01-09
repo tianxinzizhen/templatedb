@@ -38,7 +38,7 @@ func DBSelect[T any](db any) *SelectDB[T] {
 	return nil
 }
 
-func (any *SelectDB[T]) newModel(len int) *T {
+func (any *SelectDB[T]) newReceiver(len int) *T {
 	dest := new(T)
 	t := util.RefType(reflect.TypeOf(dest))
 	if util.RefType(t).Kind() == reflect.Map {
@@ -49,7 +49,8 @@ func (any *SelectDB[T]) newModel(len int) *T {
 	return dest
 }
 
-func (any *SelectDB[T]) Query(statement string, params any) (*sql.Rows, []*sql.ColumnType, error) {
+func (any *SelectDB[T]) query(params any, name []any) (*sql.Rows, []*sql.ColumnType, error) {
+	statement := getSkipFuncName(3, name)
 	sql, args, err := any.db.templateBuild(statement, params)
 	if err != nil {
 		return nil, nil, err
@@ -65,40 +66,40 @@ func (any *SelectDB[T]) Query(statement string, params any) (*sql.Rows, []*sql.C
 	return rows, columns, nil
 }
 
-func (any *SelectDB[T]) Select(statement string, params any) (rowSlice []*T, err error) {
-	rows, columns, err := any.Query(statement, params)
+func (any *SelectDB[T]) Select(params any, name ...any) (rowSlice []*T, err error) {
+	rows, columns, err := any.query(params, name)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
+	scanIndex, scanSlice := newScanDest(columns)
 	ret := *(new([]*T))
 	for rows.Next() {
-		receiver := any.newModel(len(columns))
-		destIndex, retSlice := newScanDest(columns)
-		err = rows.Scan(retSlice...)
+		err = rows.Scan(scanSlice...)
 		if err != nil {
 			return
 		}
-		util.ConvertResultAnys(columns, destIndex, retSlice, receiver, template.AsTagString)
+		receiver := any.newReceiver(len(columns))
+		util.ConvertResultAnys(columns, scanIndex, scanSlice, receiver, template.AsTagString)
 		ret = append(ret, receiver)
 	}
 	return ret, nil
 }
-func (any *SelectDB[T]) SelectFirst(statement string, params any) (row *T, err error) {
-	rows, columns, err := any.Query(statement, params)
+func (any *SelectDB[T]) SelectFirst(params any, name ...any) (row *T, err error) {
+	rows, columns, err := any.query(params, name)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
+	scanIndex, scanSlice := newScanDest(columns)
 	var receiver *T
 	if rows.Next() {
-		receiver = any.newModel(len(columns))
-		destIndex, retSlice := newScanDest(columns)
-		err = rows.Scan(retSlice...)
+		err = rows.Scan(scanSlice...)
 		if err != nil {
 			return
 		}
-		util.ConvertResultAnys(columns, destIndex, retSlice, receiver, template.AsTagString)
+		receiver = any.newReceiver(len(columns))
+		util.ConvertResultAnys(columns, scanIndex, scanSlice, receiver, template.AsTagString)
 	}
 	return receiver, nil
 }

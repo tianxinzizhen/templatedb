@@ -5,6 +5,9 @@
     <sql func="TestSelect" name="select">
         select userId,name,phone,introduction,avatar,image from goodsShop where name=@name and phone=@phone
     </sql>
+    <sql func="TestSelect" name="selectAtsign">
+        select userId,name,phone,introduction,avatar,image,status from goodsShop
+    </sql>
     <sql func="TestSelect" name="sqlparam">
         select userId,name,phone,introduction,avatar,image from goodsShop where name={sqlescape .name}
     </sql>
@@ -12,7 +15,7 @@
         select userId,name,phone,introduction,avatar,image from goodsShop where name={param .name}
     </sql>
     <sql func="TestSelect" >
-        select {template "clumns"} from goodsShop where name={param .name}
+        select {include "clumns"} from goodsShop where name={param .name}
     </sql>
 
     <sql func="TestInFunction" name="inints" >

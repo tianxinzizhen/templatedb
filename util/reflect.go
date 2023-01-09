@@ -101,14 +101,14 @@ func getValue(scanVal any) any {
 	}
 }
 
-func ConvertResultAnys(columns []*sql.ColumnType, destIndex map[string]int, retSlice []any, receiver any, as string) {
+func ConvertResultAnys(columns []*sql.ColumnType, scanIndex map[string]int, scanSlice []any, receiver any, as string) {
 	t := RefType(reflect.TypeOf(receiver))
 	if t.Kind() == reflect.Struct {
 		valueMap := setFieldMap(receiver, as)
 		for _, item := range columns {
 			if v, ok := valueMap[item.Name()]; ok {
-				index := destIndex[item.Name()]
-				scanVal := retSlice[index]
+				index := scanIndex[item.Name()]
+				scanVal := scanSlice[index]
 				rScanVal := reflect.ValueOf(getValue(scanVal))
 				if rScanVal.CanConvert(v.Type()) {
 					v.Set(rScanVal.Convert(v.Type()))
@@ -119,8 +119,8 @@ func ConvertResultAnys(columns []*sql.ColumnType, destIndex map[string]int, retS
 		v := RefValue(reflect.ValueOf(receiver))
 		if t.Key().Kind() == reflect.String {
 			for _, item := range columns {
-				index := destIndex[item.Name()]
-				scanVal := retSlice[index]
+				index := scanIndex[item.Name()]
+				scanVal := scanSlice[index]
 				rScanVal := reflect.ValueOf(getValue(scanVal))
 				if rScanVal.CanConvert(t.Elem()) {
 					v.SetMapIndex(reflect.ValueOf(item.Name()), rScanVal.Convert(t.Elem()))
@@ -132,19 +132,19 @@ func ConvertResultAnys(columns []*sql.ColumnType, destIndex map[string]int, retS
 	} else if t.Kind() == reflect.Slice {
 		sliceVal := RefValue(reflect.ValueOf(receiver))
 		for index := range columns {
-			rScanVal := reflect.ValueOf(getValue(retSlice[index]))
+			rScanVal := reflect.ValueOf(getValue(scanSlice[index]))
 			if rScanVal.CanConvert(t.Elem()) {
-				retSlice[index] = rScanVal.Convert(t.Elem()).Interface()
+				scanSlice[index] = rScanVal.Convert(t.Elem()).Interface()
 			} else {
-				retSlice[index] = reflect.New(t.Elem()).Elem().Interface()
+				scanSlice[index] = reflect.New(t.Elem()).Elem().Interface()
 			}
 		}
-		for _, v := range retSlice {
+		for _, v := range scanSlice {
 			sliceVal.Set(reflect.Append(sliceVal, reflect.ValueOf(v)))
 		}
 	} else {
 		v := RefValue(reflect.ValueOf(receiver))
-		rScanVal := reflect.ValueOf(getValue(retSlice[0]))
+		rScanVal := reflect.ValueOf(getValue(scanSlice[0]))
 		if rScanVal.CanConvert(t) {
 			v.Set(rScanVal.Convert(t))
 		}

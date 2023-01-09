@@ -91,6 +91,7 @@ var key = map[string]itemType{
 	"range":    itemRange,
 	"nil":      itemNil,
 	"template": itemTemplate,
+	"include":  itemTemplate, //取个别名
 	"with":     itemWith,
 }
 
