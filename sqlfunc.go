@@ -38,7 +38,7 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 	if list.Kind() == reflect.Slice || list.Kind() == reflect.Array {
 		sb := strings.Builder{}
 		sb.WriteString("in (")
-		var args []any
+		var args []any = make([]any, list.Len())
 		for i := 0; i < list.Len(); i++ {
 			if i > 0 {
 				sb.WriteByte(',')
@@ -56,7 +56,7 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 					if err != nil {
 						return "", nil, err
 					}
-					args = append(args, field.Interface())
+					args[i] = field.Interface()
 				} else {
 					return "", nil, fmt.Errorf("in params : The attribute %s was not found in the structure %s.%s", fieldName, item.Type().PkgPath(), item.Type().Name())
 				}
@@ -64,7 +64,7 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 				if item.Type().Key().Kind() == reflect.String {
 					fieldValue := item.MapIndex(reflect.ValueOf(fieldName))
 					if fieldValue.IsValid() {
-						args = append(args, fieldValue.Interface())
+						args[i] = fieldValue.Interface()
 					} else {
 						return "", nil, fmt.Errorf("in params : fieldValue in map[%s] IsValid", fieldName)
 					}
@@ -72,7 +72,7 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 					return "", nil, fmt.Errorf("in params : Map key Type is not string")
 				}
 			default:
-				args = append(args, item.Interface())
+				args[i] = item.Interface()
 			}
 		}
 		sb.WriteString(")")
@@ -83,19 +83,19 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 }
 func params(list ...reflect.Value) (string, []any) {
 	sb := strings.Builder{}
-	var args []any
+	var args []any = make([]any, len(list))
 	for i, v := range list {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
 		sb.WriteByte('?')
-		args = append(args, v.Interface())
+		args[i] = v.Interface()
 	}
 	return sb.String(), args
 }
 
 func like(param reflect.Value) (string, []any) {
-	var args []any
+	var args []any = make([]any, 1)
 	p := fmt.Sprint(param)
 	lb := strings.Builder{}
 	if !strings.HasPrefix(p, "%") {
@@ -105,7 +105,7 @@ func like(param reflect.Value) (string, []any) {
 	if !strings.HasSuffix(p, "%") {
 		lb.WriteByte('%')
 	}
-	args = append(args, lb.String())
+	args[0] = lb.String()
 	return " like ? ", args
 }
 
@@ -123,12 +123,25 @@ func sqlescape(list ...reflect.Value) (string, error) {
 	}
 	return sb.String(), nil
 }
+
+func orNull(param any) (string, []any) {
+	var args []any = make([]any, 1)
+	isTure, _ := template.IsTrue(param)
+	if isTure {
+		args[0] = param
+	} else {
+		args[0] = nil
+	}
+	return "?", args
+}
+
 func init() {
 	LoadFunc("comma", comma)
 	LoadFunc("in", inParam)
 	LoadFunc("like", like)
 	LoadFunc("param", params)
 	LoadFunc("sqlescape", sqlescape)
+	LoadFunc("orNull", orNull)
 }
 
 func LoadFunc(key string, funcMethod any) {
