@@ -142,12 +142,16 @@ type TemplateTxDB struct {
 }
 
 func (tx *TemplateTxDB) AutoCommit(err *error) {
-	e := recover()
-	if e != nil {
-		*err = e.(error)
+	if *err != nil {
 		tx.tx.Rollback()
 	} else {
-		tx.tx.Commit()
+		e := recover()
+		if e != nil {
+			*err = e.(error)
+			tx.tx.Rollback()
+		} else {
+			tx.tx.Commit()
+		}
 	}
 }
 
