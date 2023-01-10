@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
-	"strings"
 
 	"github.com/tianxinzizhen/templatedb/load"
 	"github.com/tianxinzizhen/templatedb/load/xml"
@@ -64,6 +63,13 @@ func NewDefaultDB(SqlDB *sql.DB, options ...func(*DefaultDB) error) (*DefaultDB,
 	return db, nil
 }
 
+func (db *DefaultDB) Recover(err *error) {
+	e := recover()
+	if e != nil {
+		*err = e.(error)
+	}
+}
+
 func (db *DefaultDB) parse(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error) {
 	templateSql, err := template.New("").Delims(db.delimsLeft, db.delimsRight).Funcs(sqlfunc).Parse(parse)
 	if err != nil {
@@ -93,26 +99,27 @@ func (db *DefaultDB) templateBuild(query string, params any) (sql string, args [
 	return templateSql.ExecuteBuilder(params)
 }
 
-func (db *DefaultDB) Exec(params any, name ...any) (lastInsertId, rowsAffected int, err error) {
+func (db *DefaultDB) Exec(params any, name ...any) (lastInsertId, rowsAffected int) {
 	statement := getSkipFuncName(2, name)
 	sql, args, err := db.templateBuild(statement, params)
 	if err != nil {
-		return
+		panic(err)
 	}
 	result, err := db.sqlDB.Exec(sql, args...)
 	if err != nil {
-		return
+		panic(err)
 	}
 	lastid, err := result.LastInsertId()
 	if err != nil {
-		return
+		panic(err)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return
+		panic(err)
 	}
-	return int(lastid), int(affected), nil
+	return int(lastid), int(affected)
 }
+
 func (db *DefaultDB) Begin() (*TemplateTxDB, error) {
 	tx, err := db.sqlDB.Begin()
 	if err != nil {
@@ -134,73 +141,45 @@ type TemplateTxDB struct {
 	tx *sql.Tx
 }
 
-func (tx *TemplateTxDB) Rollback() (err error) {
-	return tx.tx.Rollback()
-}
-func (tx *TemplateTxDB) Commit() (err error) {
-	return tx.tx.Commit()
-}
 func (tx *TemplateTxDB) AutoCommit(err *error) {
-	if *err != nil {
-		tx.Rollback()
+	e := recover()
+	if e != nil {
+		*err = e.(error)
+		tx.tx.Rollback()
 	} else {
-		tx.Commit()
+		tx.tx.Commit()
 	}
 }
 
-func (tx *TemplateTxDB) Exec(params any, name ...any) (lastInsertId, rowsAffected int, err error) {
+func (tx *TemplateTxDB) Exec(params any, name ...any) (lastInsertId, rowsAffected int) {
 	statement := getSkipFuncName(2, name)
 	sql, args, err := tx.db.templateBuild(statement, params)
 	if err != nil {
-		return
+		panic(err)
 	}
 	result, err := tx.tx.Exec(sql, args...)
 	if err != nil {
-		return
+		panic(err)
 	}
 	lastid, err := result.LastInsertId()
 	if err != nil {
-		return
+		panic(err)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return
+		panic(err)
 	}
-	return int(lastid), int(affected), nil
+	return int(lastid), int(affected)
 }
 
-func (tx *TemplateTxDB) ExecMulti(param any, name ...any) (rowsAffected int, err error) {
-	statement := getSkipFuncName(2, name)
-	execSql, args, err := tx.db.templateBuild(statement, param)
-	if err != nil {
-		return 0, err
-	}
-	sqls := strings.Split(execSql, ";")
-	for _, sql := range sqls {
-		if len(strings.Trim(sql, "\t\n\f\r ")) == 0 {
-			continue
-		}
-		result, err := tx.tx.Exec(execSql, args...)
-		if err != nil {
-			return 0, err
-		}
-		itemAffected, err := result.RowsAffected()
-		if err != nil {
-			return 0, err
-		}
-		rowsAffected += int(itemAffected)
-	}
-	return 0, nil
-}
-
-func (tx *TemplateTxDB) PrepareExec(params []any, name ...any) (rowsAffected int, err error) {
+func (tx *TemplateTxDB) PrepareExec(params []any, name ...any) (rowsAffected int) {
 	statement := getSkipFuncName(2, name)
 	var stmtMaps map[string]*sql.Stmt = make(map[string]*sql.Stmt)
 	var tempSql string
 	for _, param := range params {
 		execSql, args, err := tx.db.templateBuild(statement, param)
 		if err != nil {
-			return 0, err
+			panic(err)
 		}
 		var stmt *sql.Stmt
 		if tempSql != execSql {
@@ -208,7 +187,7 @@ func (tx *TemplateTxDB) PrepareExec(params []any, name ...any) (rowsAffected int
 			if s, ok := stmtMaps[execSql]; !ok {
 				stmt, err = tx.tx.Prepare(execSql)
 				if err != nil {
-					return 0, err
+					panic(err)
 				}
 				stmtMaps[execSql] = stmt
 			} else {
@@ -219,11 +198,11 @@ func (tx *TemplateTxDB) PrepareExec(params []any, name ...any) (rowsAffected int
 		}
 		result, err := stmt.Exec(args...)
 		if err != nil {
-			return 0, err
+			panic(err)
 		}
 		batchAffected, err := result.RowsAffected()
 		if err != nil {
-			return 0, err
+			panic(err)
 		}
 		rowsAffected += int(batchAffected)
 	}

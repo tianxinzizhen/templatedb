@@ -7,4 +7,4 @@
 
 # 如何使用
 查看文件test/sql/test_sql.xml,test/templatedb_test.go
-有几个例子看，前置需要对golang的模板熟悉
+有几个例子看，前置需要对golang的模板熟悉。

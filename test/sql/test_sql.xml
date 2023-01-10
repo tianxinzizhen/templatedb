@@ -3,40 +3,40 @@
         id,userId,name,phone,introduction,avatar,image
     </sql>
     <sql func="TestSelect" name="select">
-        select userId,name,phone,introduction,avatar,image from goodsShop where name=@name and phone=@phone
+        select userId,name,phone,introduction,avatar,image from tbl_test where name=@name and phone=@phone
     </sql>
     <sql func="TestSelect" name="selectAtsign">
-        select userId,name,phone,introduction,avatar,image,status from goodsShop
+        select userId,name,phone,introduction,avatar,image,status from tbl_test
     </sql>
     <sql func="TestSelect" name="sqlparam">
-        select userId,name,phone,introduction,avatar,image from goodsShop where name={sqlescape .name}
+        select userId,name,phone,introduction,avatar,image from tbl_test where name={sqlescape .name}
     </sql>
     <sql func="TestSelect" name="param">
-        select userId,name,phone,introduction,avatar,image from goodsShop where name={param .name}
+        select userId,name,phone,introduction,avatar,image from tbl_test where name={param .name}
     </sql>
     <sql func="TestSelect" >
-        select {include "clumns"} from goodsShop where name={param .name}
+        select {include "clumns"} from tbl_test where name={param .name}
     </sql>
 
     <sql func="TestInFunction" name="inints" >
-        select {template "clumns"} from goodsShop where id {in .ids}
+        select {template "clumns"} from tbl_test where id {in .ids}
     </sql>
     <sql func="TestInFunction" name="inStructs" >
-        select {template "clumns"} from goodsShop where id {in .ids "id"}
+        select {template "clumns"} from tbl_test where id {in .ids "id"}
     </sql>
     <sql func="TestInFunction" name="inMaps" >
-        select {template "clumns"} from goodsShop where id {in .ids "id"}
+        select {template "clumns"} from tbl_test where id {in .ids "id"}
     </sql>
 
     <sql func="TestInsert" name="insertOne" >
-        INSERT INTO test.goodsshop
+        INSERT INTO lz_tour.tbl_test
         (userId, name, phone, introduction, avatar, image, status)
         VALUES(@userId, @name, @phone, @introduction, @avatar, @image, @status)       
     </sql>
 
     <!-- comma用来做逗号处理 -->
     <sql func="TestInsert" name="insertList" >
-        INSERT INTO test.goodsshop
+        INSERT INTO lz_tour.tbl_test
         (userId, name, phone, introduction, avatar, image, status)
         VALUES {range $i,$v:=. } {comma $i}
         (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
@@ -44,7 +44,7 @@
     </sql>
 
     <sql func="TestInsert" name="insertListParam" >
-        INSERT INTO test.goodsshop
+        INSERT INTO lz_tour.tbl_test
         (userId, name, phone, introduction, avatar, image, status)
         VALUES {range $i,$v:=. } {comma $i}
         ({param .userId  .name .phone .introduction .avatar .image .status})  

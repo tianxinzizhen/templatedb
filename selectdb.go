@@ -66,10 +66,10 @@ func (any *SelectDB[T]) query(params any, name []any) (*sql.Rows, []*sql.ColumnT
 	return rows, columns, nil
 }
 
-func (any *SelectDB[T]) Select(params any, name ...any) (rowSlice []*T, err error) {
+func (any *SelectDB[T]) Select(params any, name ...any) []*T {
 	rows, columns, err := any.query(params, name)
 	if err != nil {
-		return
+		panic(err)
 	}
 	defer rows.Close()
 	scanIndex, scanSlice := newScanDest(columns)
@@ -77,18 +77,19 @@ func (any *SelectDB[T]) Select(params any, name ...any) (rowSlice []*T, err erro
 	for rows.Next() {
 		err = rows.Scan(scanSlice...)
 		if err != nil {
-			return
+			panic(err)
 		}
 		receiver := any.newReceiver(len(columns))
 		util.ConvertResultAnys(columns, scanIndex, scanSlice, receiver, template.AsTagString)
 		ret = append(ret, receiver)
 	}
-	return ret, nil
+	return ret
 }
-func (any *SelectDB[T]) SelectFirst(params any, name ...any) (row *T, err error) {
+
+func (any *SelectDB[T]) SelectFirst(params any, name ...any) *T {
 	rows, columns, err := any.query(params, name)
 	if err != nil {
-		return
+		panic(err)
 	}
 	defer rows.Close()
 	scanIndex, scanSlice := newScanDest(columns)
@@ -96,10 +97,10 @@ func (any *SelectDB[T]) SelectFirst(params any, name ...any) (row *T, err error)
 	if rows.Next() {
 		err = rows.Scan(scanSlice...)
 		if err != nil {
-			return
+			panic(err)
 		}
 		receiver = any.newReceiver(len(columns))
 		util.ConvertResultAnys(columns, scanIndex, scanSlice, receiver, template.AsTagString)
 	}
-	return receiver, nil
+	return receiver
 }
