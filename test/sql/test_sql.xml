@@ -55,7 +55,7 @@
     </sql>
 
 
-    <sql func="TestFunc" name="func1" >
-        select userId,name from tbl_test
+    <sql func="funcExec" name="func1" >
+        select userId,name from tbl_test1
     </sql>
 </root>

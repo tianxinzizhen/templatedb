@@ -138,8 +138,7 @@ func (sdb *SelectDB[T]) newReceiver(columns []*sql.ColumnType, scanRows []any) (
 	}
 }
 
-func (sdb *SelectDB[T]) query(params any, name []any) (*sql.Rows, []*sql.ColumnType, error) {
-	statement := getSkipFuncName(3, name)
+func (sdb *SelectDB[T]) query(statement string, params any) (*sql.Rows, []*sql.ColumnType, error) {
 	sql, args, err := sdb.db.templateBuild(statement, params)
 	if err != nil {
 		return nil, nil, err
@@ -156,9 +155,10 @@ func (sdb *SelectDB[T]) query(params any, name []any) (*sql.Rows, []*sql.ColumnT
 }
 
 func (sdb *SelectDB[T]) Select(params any, name ...any) []*T {
-	rows, columns, err := sdb.query(params, name)
+	statement := getSkipFuncName(2, name)
+	rows, columns, err := sdb.query(statement, params)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	defer rows.Close()
 	scanIndex := newScanDest(columns, reflect.TypeOf((*T)(nil)).Elem())
@@ -167,7 +167,7 @@ func (sdb *SelectDB[T]) Select(params any, name ...any) []*T {
 		receiver, destSlice := sdb.newReceiver(columns, scanIndex)
 		err = rows.Scan(destSlice...)
 		if err != nil {
-			panic(err)
+			panic(fmt.Errorf("%s->%s", statement, err))
 		}
 		ret = append(ret, receiver)
 	}
@@ -175,9 +175,10 @@ func (sdb *SelectDB[T]) Select(params any, name ...any) []*T {
 }
 
 func (sdb *SelectDB[T]) SelectFirst(params any, name ...any) *T {
-	rows, columns, err := sdb.query(params, name)
+	statement := getSkipFuncName(2, name)
+	rows, columns, err := sdb.query(statement, params)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	defer rows.Close()
 	scanIndex := newScanDest(columns, reflect.TypeOf((*T)(nil)))
@@ -185,7 +186,7 @@ func (sdb *SelectDB[T]) SelectFirst(params any, name ...any) *T {
 		receiver, destSlice := sdb.newReceiver(columns, scanIndex)
 		err = rows.Scan(destSlice...)
 		if err != nil {
-			panic(err)
+			panic(fmt.Errorf("%s->%s", statement, err))
 		}
 		return receiver
 	} else {

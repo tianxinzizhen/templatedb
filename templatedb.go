@@ -103,19 +103,19 @@ func (db *DefaultDB) Exec(params any, name ...any) (lastInsertId, rowsAffected i
 	statement := getSkipFuncName(2, name)
 	sql, args, err := db.templateBuild(statement, params)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	result, err := db.sqlDB.Exec(sql, args...)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	lastid, err := result.LastInsertId()
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	return int(lastid), int(affected)
 }
@@ -159,19 +159,19 @@ func (tx *TemplateTxDB) Exec(params any, name ...any) (lastInsertId, rowsAffecte
 	statement := getSkipFuncName(2, name)
 	sql, args, err := tx.db.templateBuild(statement, params)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	result, err := tx.tx.Exec(sql, args...)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	lastid, err := result.LastInsertId()
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	return int(lastid), int(affected)
 }
@@ -183,7 +183,7 @@ func (tx *TemplateTxDB) PrepareExec(params []any, name ...any) (rowsAffected int
 	for _, param := range params {
 		execSql, args, err := tx.db.templateBuild(statement, param)
 		if err != nil {
-			panic(err)
+			panic(fmt.Errorf("%s->%s", statement, err))
 		}
 		var stmt *sql.Stmt
 		if tempSql != execSql {
@@ -202,11 +202,11 @@ func (tx *TemplateTxDB) PrepareExec(params []any, name ...any) (rowsAffected int
 		}
 		result, err := stmt.Exec(args...)
 		if err != nil {
-			panic(err)
+			panic(fmt.Errorf("%s->%s", statement, err))
 		}
 		batchAffected, err := result.RowsAffected()
 		if err != nil {
-			panic(err)
+			panic(fmt.Errorf("%s->%s", statement, err))
 		}
 		rowsAffected += int(batchAffected)
 	}

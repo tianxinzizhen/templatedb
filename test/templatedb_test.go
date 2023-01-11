@@ -186,15 +186,19 @@ func TestInsertTx(t *testing.T) {
 	}
 }
 
-func TestFunc(t *testing.T) {
+func funcExec() (err error) {
 	db, err := getDB()
-	if err != nil {
-		t.Error(err)
-	}
 	defer db.Recover(&err)
 	ret := templatedb.DBSelect[func() (int, string)](db).Select(nil, "func1")
 	for _, v := range ret {
 		id, name := (*v)()
 		fmt.Printf("%#v,%#v\n", id, name)
+	}
+	return
+}
+func TestFunc(t *testing.T) {
+	err := funcExec()
+	if err != nil {
+		t.Error(err)
 	}
 }
