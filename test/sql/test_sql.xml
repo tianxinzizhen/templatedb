@@ -17,6 +17,9 @@
     <sql func="TestSelect" >
         select {include "clumns"} from tbl_test where name={param .name}
     </sql>
+    <sql func="TestSelect" name="all">
+        select {include "clumns"} from lz_tour.tbl_test 
+    </sql>
 
     <sql func="TestInFunction" name="inints" >
         select {template "clumns"} from tbl_test where id {in .ids}
@@ -49,5 +52,10 @@
         VALUES {range $i,$v:=. } {comma $i}
         ({param .userId  .name .phone .introduction .avatar .image .status})  
         {end}
+    </sql>
+
+
+    <sql func="TestFunc" name="func1" >
+        select userId,name from tbl_test
     </sql>
 </root>

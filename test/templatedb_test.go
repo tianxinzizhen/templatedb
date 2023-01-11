@@ -57,6 +57,9 @@ var testParam = []struct {
 	{name: "", param: GoodShop{
 		Name: "3店铺1",
 	}},
+	{name: "all", param: GoodShop{
+		Name: "3店铺1",
+	}},
 }
 
 func TestSelect(t *testing.T) {
@@ -65,10 +68,10 @@ func TestSelect(t *testing.T) {
 		t.Error(err)
 	}
 	defer db.Recover(&err)
-	for _, tp := range testParam[4:5] {
-		ret := templatedb.DBSelect[GoodShop](db).Select(tp.param, tp.name)
+	for _, tp := range testParam[len(testParam)-1:] {
+		ret := templatedb.DBSelect[int](db).Select(tp.param, tp.name)
 		for _, v := range ret {
-			fmt.Printf("%#v\n", v)
+			fmt.Printf("%#v\n", *v)
 		}
 	}
 }
@@ -180,5 +183,18 @@ func TestInsertTx(t *testing.T) {
 			fmt.Printf("lastInsertId:%d,rowsAffected:%d\n", lastInsertId, rowsAffected)
 		}
 		txfunc()
+	}
+}
+
+func TestFunc(t *testing.T) {
+	db, err := getDB()
+	if err != nil {
+		t.Error(err)
+	}
+	defer db.Recover(&err)
+	ret := templatedb.DBSelect[func() (int, string)](db).Select(nil, "func1")
+	for _, v := range ret {
+		id, name := (*v)()
+		fmt.Printf("%#v,%#v\n", id, name)
 	}
 }
