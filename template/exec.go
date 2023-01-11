@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/tianxinzizhen/templatedb/template/parse"
 )
@@ -361,7 +362,16 @@ func isTrue(val reflect.Value) (truth, ok bool) {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		truth = val.Uint() != 0
 	case reflect.Struct:
-		truth = true // Struct values are always true.
+		if tv, ok := val.Interface().(time.Time); ok {
+			if tv == (time.Time{}) {
+				truth = false
+			} else {
+				truth = true
+			}
+		} else {
+			truth = true // Struct values are always true.
+		}
+
 	default:
 		return
 	}

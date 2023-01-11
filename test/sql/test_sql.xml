@@ -55,7 +55,7 @@
     </sql>
 
 
-    <sql func="funcExec" name="func1" >
-        select userId,name from tbl_test1
+    <sql func="insertTime" >
+        insert into tbl_test value ({orNull .time})
     </sql>
 </root>

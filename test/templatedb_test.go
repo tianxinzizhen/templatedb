@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"testing"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/tianxinzizhen/templatedb"
@@ -198,6 +199,25 @@ func funcExec() (err error) {
 }
 func TestFunc(t *testing.T) {
 	err := funcExec()
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func insertTime() (err error) {
+	db, err := getDB()
+	if err != nil {
+		return err
+	}
+	defer db.Recover(&err)
+	db.Exec(map[string]any{
+		"time": time.Time{},
+	})
+	return
+}
+
+func TestInsertTime(t *testing.T) {
+	err := insertTime()
 	if err != nil {
 		t.Error(err)
 	}
