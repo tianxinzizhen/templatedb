@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"strings"
 
 	"github.com/tianxinzizhen/templatedb/load"
 	"github.com/tianxinzizhen/templatedb/load/xml"
@@ -90,6 +91,7 @@ func (db *DefaultDB) templateBuild(query string, params any) (sql string, args [
 	}
 	templateSql, templateok := db.template[query]
 	if !templateok {
+		_, query, _ := strings.Cut(query, ":")
 		templateSql, err = db.parse(query)
 		if err != nil {
 			return

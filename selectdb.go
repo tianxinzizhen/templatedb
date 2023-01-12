@@ -181,7 +181,7 @@ func (sdb *SelectDB[T]) SelectFirst(params any, name ...any) *T {
 		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	defer rows.Close()
-	scanIndex := newScanDest(columns, reflect.TypeOf((*T)(nil)))
+	scanIndex := newScanDest(columns, reflect.TypeOf((*T)(nil)).Elem())
 	if rows.Next() {
 		receiver, destSlice := sdb.newReceiver(columns, scanIndex)
 		err = rows.Scan(destSlice...)

@@ -16,7 +16,10 @@ var sqlfunc template.FuncMap = make(template.FuncMap)
 var SqlEscapeBytesBackslash = false
 
 func comma(iVal reflect.Value) (string, error) {
-	i := util.RefValue(iVal)
+	i, isNil := util.Indirect(iVal)
+	if isNil {
+		panic("comma sql function in paramter is nil")
+	}
 	var commaPrint bool
 	switch i.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -33,7 +36,10 @@ func comma(iVal reflect.Value) (string, error) {
 	}
 }
 func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
-	list = util.RefValue(list)
+	list, isNil := util.Indirect(list)
+	if isNil {
+		return "", nil, fmt.Errorf("inParam sql function in paramter list is nil")
+	}
 	fieldName := fmt.Sprint(fieldNames...)
 	if list.Kind() == reflect.Slice || list.Kind() == reflect.Array {
 		sb := strings.Builder{}
@@ -44,7 +50,10 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 				sb.WriteByte(',')
 			}
 			sb.WriteByte('?')
-			item := util.RefValue(list.Index(i))
+			item, isNil := util.Indirect(list.Index(i))
+			if isNil {
+				continue
+			}
 			if !item.IsValid() {
 				continue
 			}

@@ -70,7 +70,7 @@ func TestSelect(t *testing.T) {
 	}
 	defer db.Recover(&err)
 	for _, tp := range testParam[len(testParam)-1:] {
-		ret := templatedb.DBSelect[int](db).Select(tp.param, tp.name)
+		ret := templatedb.DBSelect[map[string]any](db).Select(tp.param, tp.name)
 		for _, v := range ret {
 			fmt.Printf("%#v\n", *v)
 		}
@@ -220,5 +220,15 @@ func TestInsertTime(t *testing.T) {
 	err := insertTime()
 	if err != nil {
 		t.Error(err)
+	}
+}
+
+func TestQeryString(t *testing.T) {
+	db, err := getDB()
+	defer db.Recover(&err)
+	ret := templatedb.DBSelect[func() (int, string)](db).Select(nil, "select UserId, Name FROM tbl_test")
+	for _, v := range ret {
+		id, name := (*v)()
+		fmt.Printf("%#v,%#v\n", id, name)
 	}
 }
