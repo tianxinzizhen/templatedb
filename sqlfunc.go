@@ -144,13 +144,20 @@ func orNull(param any) (string, []any) {
 	return "?", args
 }
 
+func SqlEscape(arg any) (sql string, err error) {
+	return util.GetNoneEscapeSql(arg, SqlEscapeBytesBackslash)
+}
+
 func init() {
+	//sql 函数的加载
 	LoadFunc("comma", comma)
 	LoadFunc("in", inParam)
 	LoadFunc("like", like)
 	LoadFunc("param", params)
 	LoadFunc("sqlescape", sqlescape)
 	LoadFunc("orNull", orNull)
+	//模版@#号字符串连接,需要用到的sql逃逸处理
+	template.SqlEscape = SqlEscape
 }
 
 func LoadFunc(key string, funcMethod any) {

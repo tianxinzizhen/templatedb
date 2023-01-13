@@ -3,6 +3,7 @@ package xml
 import (
 	"embed"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -34,13 +35,16 @@ func LoadTemplateStatements(sqlDir embed.FS, template map[string]*template.Templ
 		return err
 	}
 	for _, fileInfo := range files {
-		if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), "_sql.xml") {
+		if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ".xml") {
 			bytes, err := sqlDir.ReadFile(dirName + "/" + fileInfo.Name())
 			if err != nil {
 				return err
 			}
 			sqlRoot := SqlStatementRoot{}
-			xml.Unmarshal(bytes, &sqlRoot)
+			err = xml.Unmarshal(bytes, &sqlRoot)
+			if err != nil {
+				return err
+			}
 			addParseTree := addCommonTemplate(sqlRoot.Sql, parse)
 			for _, v := range sqlRoot.Sql {
 				if !v.Common {
@@ -50,6 +54,50 @@ func LoadTemplateStatements(sqlDir embed.FS, template map[string]*template.Templ
 						return err
 					}
 				}
+			}
+		}
+	}
+	return nil
+}
+
+func LoadTemplateStatementsOfBytes(xmlSqls []byte, template map[string]*template.Template, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) error {
+	if xmlSqls != nil {
+		return errors.New("sql xml bytes is nil")
+	}
+	sqlRoot := SqlStatementRoot{}
+	err := xml.Unmarshal([]byte(xmlSqls), &sqlRoot)
+	if err != nil {
+		return err
+	}
+	addParseTree := addCommonTemplate(sqlRoot.Sql, parse)
+	for _, v := range sqlRoot.Sql {
+		if !v.Common {
+			key := fmt.Sprintf("%s.%s:%s", sqlRoot.Pkg, v.Func, v.Name)
+			template[key], err = parse(v.Statement, addParseTree)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func LoadTemplateStatementsOfString(xmlSqls string, template map[string]*template.Template, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) error {
+	if len(xmlSqls) == 0 {
+		return errors.New("sql xml string length is 0")
+	}
+	sqlRoot := SqlStatementRoot{}
+	err := xml.Unmarshal([]byte(xmlSqls), &sqlRoot)
+	if err != nil {
+		return err
+	}
+	addParseTree := addCommonTemplate(sqlRoot.Sql, parse)
+	for _, v := range sqlRoot.Sql {
+		if !v.Common {
+			key := fmt.Sprintf("%s.%s:%s", sqlRoot.Pkg, v.Func, v.Name)
+			template[key], err = parse(v.Statement, addParseTree)
+			if err != nil {
+				return err
 			}
 		}
 	}

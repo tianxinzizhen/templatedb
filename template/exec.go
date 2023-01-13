@@ -304,13 +304,31 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 	}
 }
 
+var SqlEscape func(arg any) (sql string, err error)
+
 func (s *state) evalAtSign(dot reflect.Value, node *parse.AtsignNode) {
 	receiver := s.varValue(node.Vars[len(node.Vars)-1])
 	val := s.evalField(dot, node.Text, node, nil, missingVal, receiver)
-	s.args = append(s.args, val.Interface())
-	_, err := fmt.Fprint(s.wr, "?")
+	arg := val.Interface()
+	if node.SuffixQuestionMark {
+		truth, _ := isTrue(val)
+		if !truth {
+			arg = nil
+		}
+	}
+	var ps = "?"
+	if node.PrefixPoundSign {
+		sqlParam, err := SqlEscape(arg)
+		if err != nil {
+			s.writeError(fmt.Errorf("evalAtSign sql escape:%s", err))
+		}
+		ps = sqlParam
+	} else {
+		s.args = append(s.args, arg)
+	}
+	_, err := fmt.Fprint(s.wr, ps)
 	if err != nil {
-		s.writeError(err)
+		s.writeError(fmt.Errorf("evalAtSign output print:%s", err))
 	}
 }
 

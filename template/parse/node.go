@@ -157,13 +157,26 @@ func (t *TextNode) Copy() Node {
 type AtsignNode struct {
 	NodeType
 	Pos
-	tr   *Tree
-	Text string   // The text; may span newlines.
-	Vars []string // variables defined at the moment.
+	tr                 *Tree
+	Text               string   // The text; may span newlines.
+	Vars               []string // variables defined at the moment.
+	PrefixPoundSign    bool     // is enable pound sign
+	SuffixQuestionMark bool     // is enable question mark
 }
 
 func (t *Tree) newAtSign(pos Pos, text string, vars []string) *AtsignNode {
-	return &AtsignNode{tr: t, NodeType: NodeAtSign, Pos: pos, Text: text, Vars: vars}
+	fieldName := text
+	prefixPoundSign := false
+	suffixQuestionMark := false
+	if strings.HasPrefix(fieldName, "#") {
+		fieldName = strings.TrimPrefix(fieldName, "#")
+		prefixPoundSign = true
+	}
+	if strings.HasSuffix(fieldName, "?") {
+		fieldName = strings.TrimSuffix(fieldName, "?")
+		suffixQuestionMark = true
+	}
+	return &AtsignNode{tr: t, NodeType: NodeAtSign, Pos: pos, Text: fieldName, Vars: vars, PrefixPoundSign: prefixPoundSign, SuffixQuestionMark: suffixQuestionMark}
 }
 
 func (t *AtsignNode) String() string {
