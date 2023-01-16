@@ -25,18 +25,21 @@ type SqlStatementRoot struct {
 }
 
 func LoadTemplateStatements(sqlDir embed.FS, template map[string]*template.Template, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) error {
-	dir, err := sqlDir.ReadDir(".")
+	files, err := sqlDir.ReadDir(".")
 	if err != nil {
 		return err
 	}
-	dirName := dir[0].Name()
-	files, err := sqlDir.ReadDir(dir[0].Name())
-	if err != nil {
-		return err
+	dirName := ""
+	if files[0].IsDir() {
+		dirName = files[0].Name() + "/"
+		files, err = sqlDir.ReadDir(files[0].Name())
+		if err != nil {
+			return err
+		}
 	}
 	for _, fileInfo := range files {
 		if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ".xml") {
-			bytes, err := sqlDir.ReadFile(dirName + "/" + fileInfo.Name())
+			bytes, err := sqlDir.ReadFile(dirName + fileInfo.Name())
 			if err != nil {
 				return err
 			}

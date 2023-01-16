@@ -18,7 +18,7 @@
         select {include "clumns"} from tbl_test where name={param .name}
     </sql>
     <sql func="TestSelect" name="all">
-        select {include "clumns"} from lz_tour.tbl_test 
+        select {include "clumns"} from tbl_test
     </sql>
 
     <sql func="TestInFunction" name="inints" >
@@ -32,14 +32,14 @@
     </sql>
 
     <sql func="TestInsert" name="insertOne" >
-        INSERT INTO lz_tour.tbl_test
+        INSERT INTO tbl_test1
         (userId, name, phone, introduction, avatar, image, status)
         VALUES(@userId, @name, @phone, @introduction, @avatar, @image, @status)       
     </sql>
 
     <!-- comma用来做逗号处理 -->
     <sql func="TestInsert" name="insertList" >
-        INSERT INTO lz_tour.tbl_test
+        INSERT INTO tbl_test
         (userId, name, phone, introduction, avatar, image, status)
         VALUES {range $i,$v:=. } {comma $i}
         (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
@@ -47,7 +47,7 @@
     </sql>
 
     <sql func="TestInsert" name="insertListParam" >
-        INSERT INTO lz_tour.tbl_test
+        INSERT INTO tbl_test
         (userId, name, phone, introduction, avatar, image, status)
         VALUES {range $i,$v:=. } {comma $i}
         ({param .userId  .name .phone .introduction .avatar .image .status})  
@@ -55,7 +55,7 @@
     </sql>
 
 
-    <sql func="insertTime" >
-        insert into tbl_test value ({orNull .time})
+    <sql func="TestInsertTime" >
+        insert into tbl_test(userId) value ({orNull .userId})
     </sql>
 </root>

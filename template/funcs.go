@@ -92,7 +92,7 @@ func addValueFuncs(out map[string]reflect.Value, in FuncMap) {
 		}
 		v := reflect.ValueOf(fn)
 		if v.Kind() != reflect.Func {
-			panic("value for " + name + " not a function")
+			panic(fmt.Errorf("value for %q not a function", name))
 		}
 		if !goodFunc(v.Type()) {
 			panic(fmt.Errorf("can't install method/function %q with %d results", name, v.Type().NumOut()))
@@ -117,9 +117,9 @@ func goodFunc(typ reflect.Type) bool {
 		return true
 	case typ.NumOut() == 2 && typ.Out(1) == errorType:
 		return true
-	case typ.NumOut() == 2 && typ.Out(1) == anySliceType:
+	case typ.NumOut() == 2 && (typ.Out(1) == anySliceType || typ.Out(1) == reflectValueType):
 		return true
-	case typ.NumOut() == 3 && typ.Out(1) == anySliceType && typ.Out(2) == errorType:
+	case typ.NumOut() == 3 && (typ.Out(1) == anySliceType || typ.Out(1) == reflectValueType) && typ.Out(2) == errorType:
 		return true
 	}
 	return false

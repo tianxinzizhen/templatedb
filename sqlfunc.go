@@ -18,7 +18,7 @@ var SqlEscapeBytesBackslash = false
 func comma(iVal reflect.Value) (string, error) {
 	i, isNil := util.Indirect(iVal)
 	if isNil {
-		panic("comma sql function in paramter is nil")
+		return "", fmt.Errorf("comma sql function in paramter is nil")
 	}
 	var commaPrint bool
 	switch i.Kind() {
@@ -148,6 +148,19 @@ func SqlEscape(arg any) (sql string, err error) {
 	return util.GetNoneEscapeSql(arg, SqlEscapeBytesBackslash)
 }
 
+func JsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
+	if asName, ok := tag.Lookup("json"); ok {
+		if asName == "-" {
+			return false
+		}
+		fName, _, _ := strings.Cut(asName, ",")
+		if fieldName == fName {
+			return true
+		}
+	}
+	return false
+}
+
 func init() {
 	//sql 函数的加载
 	LoadFunc("comma", comma)
@@ -156,8 +169,10 @@ func init() {
 	LoadFunc("param", params)
 	LoadFunc("sqlescape", sqlescape)
 	LoadFunc("orNull", orNull)
-	//模版@#号字符串连接,需要用到的sql逃逸处理
+	//模版@#号字符串拼接时对字段值转化成sql字符串函数
 	template.SqlEscape = SqlEscape
+	//使用tag为字段取别名
+	template.TagAsFieldName = JsonTagAsFieldName
 }
 
 func LoadFunc(key string, funcMethod any) {

@@ -12,7 +12,6 @@ import (
 )
 
 var AtSignString = "@"
-var AsTagString = "json"
 
 // common holds the information shared by related templates.
 type common struct {

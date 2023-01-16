@@ -1,6 +1,7 @@
 package templatedb
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -10,16 +11,16 @@ import (
 )
 
 type SelectDB[T any] struct {
-	*DefaultDB
-	tdb TemplateDB
+	actionDB
+	sqldb sqlDB
 }
 
-func DBSelect[T any](db any) *SelectDB[T] {
+func DBSelect[T any](db TemplateDB) *SelectDB[T] {
 	if db, ok := db.(*DefaultDB); ok {
-		return &SelectDB[T]{DefaultDB: db, tdb: db.sqlDB}
+		return &SelectDB[T]{actionDB: db, sqldb: db.sqlDB}
 	}
 	if db, ok := db.(*TemplateTxDB); ok {
-		return &SelectDB[T]{DefaultDB: db.DefaultDB, tdb: db.tx}
+		return &SelectDB[T]{actionDB: db.actionDB, sqldb: db.tx}
 	}
 	return nil
 }
@@ -41,6 +42,9 @@ func getTempScanDest(scanType reflect.Type) any {
 }
 
 func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
 	indexMap := make(map[int][]int, len(columns))
 	for i, item := range columns {
 		if t.Kind() == reflect.Struct {
@@ -48,7 +52,7 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 			if ok {
 				indexMap[i] = f.Index
 			} else {
-				panic(fmt.Sprintf("类型%v无法扫描字段：%s", t, item.Name()))
+				panic(fmt.Errorf("类型%v无法扫描字段：%s", t, item.Name()))
 			}
 		}
 	}
@@ -60,7 +64,7 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 		return destSlice
 	} else if t.Kind() == reflect.Map {
 		if t.Key().Kind() != reflect.String {
-			panic("scan map key type not string")
+			panic(fmt.Errorf("scan map key type not string"))
 		}
 		for _, v := range columns {
 			destSlice = append(destSlice, &scaner.MapScaner{Column: v, Name: v.Name()})
@@ -91,7 +95,7 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 			}
 			return destSlice
 		} else {
-			panic(fmt.Sprintf("scan func In(%d) Out(%d) not supported", t.NumIn(), t.NumOut()))
+			panic(fmt.Errorf("scan func In(%d) Out(%d) not supported", t.NumIn(), t.NumOut()))
 		}
 	} else {
 		if len(columns) > 0 {
@@ -104,7 +108,11 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 	}
 }
 
-func newReceiver(t reflect.Type, columns []*sql.ColumnType, scanRows []any) reflect.Value {
+func newReceiver(rt reflect.Type, columns []*sql.ColumnType, scanRows []any) reflect.Value {
+	t := rt
+	if rt.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
 	var ret reflect.Value = reflect.New(t)
 	if t.Kind() == reflect.Struct {
 		dv := ret.Elem()
@@ -164,33 +172,52 @@ func newReceiver(t reflect.Type, columns []*sql.ColumnType, scanRows []any) refl
 			}
 		}
 	}
-	return ret
+	if rt.Kind() == reflect.Pointer {
+		return ret
+	} else {
+		return ret.Elem()
+	}
 }
 
-func (sdb *SelectDB[T]) Select(params any, name ...any) []*T {
-	statement := getSkipFuncName(2, name)
-	rows, columns, err := sdb.query(sdb.tdb, statement, params)
+func (sdb *SelectDB[T]) Select(params any, name ...any) []T {
+	return sdb.selectContextCommon(context.Background(), params, name...)
+}
+func (sdb *SelectDB[T]) SelectContext(ctx context.Context, params any, name ...any) []T {
+	return sdb.selectContextCommon(ctx, params, name...)
+}
+
+func (sdb *SelectDB[T]) selectContextCommon(ctx context.Context, params any, name ...any) []T {
+	statement := getSkipFuncName(3, name)
+	rows, columns, err := sdb.query(ctx, sdb.sqldb, statement, params, name)
 	if err != nil {
 		panic(fmt.Errorf("%s->%s", statement, err))
 	}
 	defer rows.Close()
 	t := reflect.TypeOf((*T)(nil)).Elem()
 	dest := newScanDest(columns, t)
-	ret := *(new([]*T))
+	ret := *(new([]T))
 	for rows.Next() {
 		receiver := newReceiver(t, columns, dest)
 		err = rows.Scan(dest...)
 		if err != nil {
 			panic(fmt.Errorf("%s->%s", statement, err))
 		}
-		ret = append(ret, receiver.Interface().(*T))
+		ret = append(ret, receiver.Interface().(T))
 	}
 	return ret
 }
 
-func (sdb *SelectDB[T]) SelectFirst(params any, name ...any) *T {
-	statement := getSkipFuncName(2, name)
-	rows, columns, err := sdb.query(sdb.tdb, statement, params)
+func (sdb *SelectDB[T]) SelectFirst(params any, name ...any) T {
+	return sdb.selectFirstContextCommon(context.Background(), params, name...)
+}
+
+func (sdb *SelectDB[T]) SelectFirstContext(ctx context.Context, params any, name ...any) T {
+	return sdb.selectFirstContextCommon(ctx, params, name...)
+}
+
+func (sdb *SelectDB[T]) selectFirstContextCommon(ctx context.Context, params any, name ...any) (ret T) {
+	statement := getSkipFuncName(3, name)
+	rows, columns, err := sdb.query(ctx, sdb.sqldb, statement, params, name)
 	if err != nil {
 		panic(fmt.Errorf("%s->%s", statement, err))
 	}
@@ -203,8 +230,7 @@ func (sdb *SelectDB[T]) SelectFirst(params any, name ...any) *T {
 		if err != nil {
 			panic(fmt.Errorf("%s->%s", statement, err))
 		}
-		return receiver.Interface().(*T)
-	} else {
-		return nil
+		return receiver.Interface().(T)
 	}
+	return
 }

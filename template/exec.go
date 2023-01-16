@@ -22,6 +22,10 @@ import (
 // an error instead of triggering a stack overflow.
 var maxExecDepth = initMaxExecDepth()
 
+// prevent SQL escape
+var SqlEscape func(arg any) (sql string, err error)
+var TagAsFieldName func(tag reflect.StructTag, fieldName string) bool
+
 func initMaxExecDepth() int {
 	if runtime.GOARCH == "wasm" {
 		return 1000
@@ -304,8 +308,6 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 	}
 }
 
-var SqlEscape func(arg any) (sql string, err error)
-
 func (s *state) evalAtSign(dot reflect.Value, node *parse.AtsignNode) {
 	receiver := s.varValue(node.Vars[len(node.Vars)-1])
 	val := s.evalField(dot, node.Text, node, nil, missingVal, receiver)
@@ -317,7 +319,7 @@ func (s *state) evalAtSign(dot reflect.Value, node *parse.AtsignNode) {
 		}
 	}
 	var ps = "?"
-	if node.PrefixPoundSign {
+	if SqlEscape != nil && node.PrefixPoundSign {
 		sqlParam, err := SqlEscape(arg)
 		if err != nil {
 			s.writeError(fmt.Errorf("evalAtSign sql escape:%s", err))
@@ -661,14 +663,8 @@ func GetFieldByName(t reflect.Type, fieldName string) (f reflect.StructField, ok
 	}
 	for i := 0; i < t.NumField(); i++ {
 		tf := t.Field(i)
-		if asName, ok := tf.Tag.Lookup(AsTagString); ok {
-			if asName == "-" {
-				continue
-			}
-			fName, _, _ := strings.Cut(asName, ",")
-			if fieldName == fName {
-				return tf, true
-			}
+		if TagAsFieldName != nil && TagAsFieldName(tf.Tag, fieldName) {
+			return tf, true
 		}
 	}
 	return

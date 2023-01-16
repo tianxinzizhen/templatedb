@@ -11,7 +11,7 @@ import (
 	"github.com/tianxinzizhen/templatedb"
 )
 
-//go:embed sql/*
+//go:embed sql
 var sqlDir embed.FS
 
 type GoodShop struct {
@@ -26,10 +26,11 @@ type GoodShop struct {
 }
 
 func getDB() (*templatedb.DefaultDB, error) {
-	sqldb, err := sql.Open("mysql", "lix:lix@tcp(mysql.local.lezhichuyou.com:3306)/lz_tour?charset=utf8mb4&parseTime=True&loc=Local&multiStatements=true")
+	sqldb, err := sql.Open("mysql", "root:lz@3306!@tcp(mysql.local.lezhichuyou.com:3306)/lz_tour_lix?charset=utf8mb4&parseTime=True&loc=Local&multiStatements=true")
 	if err != nil {
 		return nil, err
 	}
+	templatedb.RecoverPrintf = fmt.Printf
 	return templatedb.NewDefaultDB(sqldb, templatedb.LoadSqlOfXml(sqlDir))
 }
 
@@ -70,9 +71,9 @@ func TestSelect(t *testing.T) {
 	}
 	defer db.Recover(&err)
 	for _, tp := range testParam[len(testParam)-1:] {
-		ret := templatedb.DBSelect[[]any](db).Select(tp.param, tp.name)
+		ret := templatedb.DBSelect[map[string]any](db).Select(tp.param, tp.name)
 		for _, v := range ret {
-			fmt.Printf("%#v\n", *v)
+			fmt.Printf("%#v\n", v)
 		}
 	}
 }
@@ -178,49 +179,34 @@ func TestInsertTx(t *testing.T) {
 			}
 			defer tx.AutoCommit(&err)
 			lastInsertId, rowsAffected := tx.Exec(tp.param, TestInsert, tp.name)
-			if err != nil {
-				t.Error(err)
-			}
 			fmt.Printf("lastInsertId:%d,rowsAffected:%d\n", lastInsertId, rowsAffected)
 		}
 		txfunc()
 	}
 }
 
-func funcExec() (err error) {
+func TestFunc(t *testing.T) {
 	db, err := getDB()
+	if err != nil {
+		t.Error(err)
+	}
 	defer db.Recover(&err)
 	ret := templatedb.DBSelect[func() (int, string)](db).Select(nil, TestSelect, "all")
 	for _, v := range ret {
-		id, name := (*v)()
+		id, name := v()
 		fmt.Printf("%#v,%#v\n", id, name)
 	}
-	return
-}
-func TestFunc(t *testing.T) {
-	err := funcExec()
-	if err != nil {
-		t.Error(err)
-	}
-}
-
-func insertTime() (err error) {
-	db, err := getDB()
-	if err != nil {
-		return err
-	}
-	defer db.Recover(&err)
-	db.Exec(map[string]any{
-		"time": time.Time{},
-	})
-	return
 }
 
 func TestInsertTime(t *testing.T) {
-	err := insertTime()
+	db, err := getDB()
 	if err != nil {
 		t.Error(err)
 	}
+	defer db.Recover(&err)
+	db.Exec(map[string]any{
+		"userId": time.Time{},
+	})
 }
 
 func TestQeryString(t *testing.T) {
@@ -228,7 +214,7 @@ func TestQeryString(t *testing.T) {
 	defer db.Recover(&err)
 	ret := templatedb.DBSelect[func() (int, string)](db).Select(nil, "select UserId, Name FROM tbl_test")
 	for _, v := range ret {
-		id, name := (*v)()
+		id, name := v()
 		fmt.Printf("%#v,%#v\n", id, name)
 	}
 }
@@ -247,4 +233,28 @@ func TestQeryStringMap(t *testing.T) {
 	db.SelectScanFunc(nil, func(item GoodShop) {
 		fmt.Printf("%#v\n", item)
 	}, "select UserId, Name FROM tbl_test")
+}
+
+func TestInsertPoundSign(t *testing.T) {
+	db, err := getDB()
+	defer db.Recover(&err)
+	_, af := db.Exec(GoodShop{}, `INSERT INTO tbl_test
+	(UserId, Name, Phone, Introduction, Avatar, Image, Status)
+	VALUES(@#UserId, @#Name, @#Phone, @#Introduction, @#Avatar, @#Image, @#Status);
+	`)
+	//该sql模版会把参数与sql字符串连接,不参数化执行,注意sql注入
+	//同函数sqlescape
+	fmt.Println(af)
+}
+
+func TestInsertPoundSignQuestionMark(t *testing.T) {
+	db, err := getDB()
+	defer db.Recover(&err)
+	_, af := db.Exec(GoodShop{}, `INSERT INTO tbl_test
+	(UserId, Name, Phone, Introduction, Avatar, Image, Status)
+	VALUES(@#UserId?, @#Name?, @#Phone?, @Introduction?, @Avatar?, @Image?, @Status?);
+	`)
+	//如果参数是零值,就会转化成null到数据库
+	//同函数orNull
+	fmt.Println(af)
 }

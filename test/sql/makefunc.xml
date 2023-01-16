@@ -1,0 +1,17 @@
+<root pkg="github.com/tianxinzizhen/templatedb/test">
+    <sql func="MTest" name="Select">
+        select * from tbl_test
+    </sql>
+    <sql func="MTest" name="Exec">
+        INSERT INTO tbl_test
+        (userId, name, phone, introduction, avatar, image, status)
+        VALUES {range $i,$v:=. } {comma $i}
+        (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+        {end}
+    </sql>
+
+    <sql func="MTest" name="PrepareExec">
+        INSERT INTO tbl_test (userId, name, phone, introduction, avatar, image, status) VALUES
+        (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+    </sql>
+</root>
