@@ -1,11 +1,13 @@
 package templatedb
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 
+	"github.com/tianxinzizhen/templatedb/scanner"
 	"github.com/tianxinzizhen/templatedb/template"
 
 	"github.com/tianxinzizhen/templatedb/util"
@@ -133,15 +135,42 @@ func sqlescape(list ...reflect.Value) (string, error) {
 	return sb.String(), nil
 }
 
-func orNull(param any) (string, []any) {
-	var args []any = make([]any, 1)
-	isTure, _ := template.IsTrue(param)
-	if isTure {
-		args[0] = param
-	} else {
-		args[0] = nil
+func orNull(list ...reflect.Value) (string, []any) {
+	sb := strings.Builder{}
+	var args []any = make([]any, len(list))
+	for i, v := range list {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('?')
+		vi := v.Interface()
+		isTure, _ := template.IsTrue(vi)
+		if isTure {
+			args[i] = vi
+		}
 	}
-	return "?", args
+	return sb.String(), args
+}
+
+func marshal(list ...reflect.Value) (string, []any, error) {
+	sb := strings.Builder{}
+	var args []any = make([]any, len(list))
+	for i, v := range list {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('?')
+		vi := v.Interface()
+		isTure, _ := template.IsTrue(vi)
+		if isTure {
+			mJson, err := json.Marshal(vi)
+			if err != nil {
+				return "", nil, err
+			}
+			args[i] = mJson
+		}
+	}
+	return sb.String(), args, nil
 }
 
 func SqlEscape(arg any) (sql string, err error) {
@@ -161,20 +190,36 @@ func JsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
 	return false
 }
 
+func JsonConvertStruct(s *scanner.StructScaner, v any) error {
+	if v == nil {
+		return nil
+	}
+	field := s.Dest.FieldByIndex(s.Index)
+	if field.Kind() == reflect.Pointer {
+		field.Set(reflect.New(field.Type().Elem()))
+	} else {
+		field = field.Addr()
+	}
+	return json.Unmarshal(v.([]byte), field.Interface())
+}
+
 func init() {
 	//sql 函数的加载
-	LoadFunc("comma", comma)
-	LoadFunc("in", inParam)
-	LoadFunc("like", like)
-	LoadFunc("param", params)
-	LoadFunc("sqlescape", sqlescape)
-	LoadFunc("orNull", orNull)
+	AddTemplateFunc("comma", comma)
+	AddTemplateFunc("in", inParam)
+	AddTemplateFunc("like", like)
+	AddTemplateFunc("param", params)
+	AddTemplateFunc("sqlescape", sqlescape)
+	AddTemplateFunc("orNull", orNull)
+	AddTemplateFunc("marshal", marshal)
 	//模版@#号字符串拼接时对字段值转化成sql字符串函数
 	template.SqlEscape = SqlEscape
 	//使用tag为字段取别名
 	template.TagAsFieldName = JsonTagAsFieldName
+	//mysql的json字段处理
+	AddScanConvertDatabaseTypeFunc("JSON", JsonConvertStruct)
 }
 
-func LoadFunc(key string, funcMethod any) {
+func AddTemplateFunc(key string, funcMethod any) {
 	sqlfunc[key] = funcMethod
 }

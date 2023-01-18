@@ -1,4 +1,4 @@
-package scaner
+package scanner
 
 import (
 	"database/sql"
@@ -7,13 +7,17 @@ import (
 )
 
 type StructScaner struct {
-	Dest  *reflect.Value
-	Index []int
+	Dest    *reflect.Value
+	Convert func(s *StructScaner, v any) error
+	Index   []int
 }
 
 func (s *StructScaner) Scan(src any) error {
 	if src == nil {
 		return nil
+	}
+	if s.Convert != nil {
+		return s.Convert(s, src)
 	}
 	return convertAssign(s.Dest.FieldByIndex(s.Index).Addr().Interface(), src)
 }

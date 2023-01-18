@@ -1,8 +1,22 @@
 <root pkg="github.com/tianxinzizhen/templatedb/test">
     <sql func="MTest" name="Select">
-        select * from tbl_test
+        select * from tbl_test1
     </sql>
     <sql func="MTest" name="Exec">
+        INSERT INTO tbl_test1
+        (userId, name, phone, introduction, avatar, image, status)
+        VALUES {range $i,$v:=. } {comma $i}
+        (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+        {end}
+    </sql>
+    <sql func="MTest" name="ExecNoResult">
+        INSERT INTO tbl_test
+        (userId, name, phone, introduction, avatar, image, status)
+        VALUES {range $i,$v:=. } {comma $i}
+        (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+        {end}
+    </sql>
+    <sql func="MTest" name="ExecNoResultError">
         INSERT INTO tbl_test
         (userId, name, phone, introduction, avatar, image, status)
         VALUES {range $i,$v:=. } {comma $i}
@@ -13,5 +27,14 @@
     <sql func="MTest" name="PrepareExec">
         INSERT INTO tbl_test (userId, name, phone, introduction, avatar, image, status) VALUES
         (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+    </sql>
+
+
+    <sql func="MTestJson" name="Insert">
+        INSERT INTO lz_tour_lix.tbl_test_json (jname, `user`) VALUES(@jname, {marshal .user});
+    </sql>
+
+    <sql func="MTestJson" name="Select">
+        SELECT Id, jname, `user` FROM lz_tour_lix.tbl_test_json;
     </sql>
 </root>

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/tianxinzizhen/templatedb/scaner"
+	"github.com/tianxinzizhen/templatedb/scanner"
 	"github.com/tianxinzizhen/templatedb/template"
 )
 
@@ -41,6 +41,12 @@ func getTempScanDest(scanType reflect.Type) any {
 	}
 }
 
+var scanConvertByDatabaseType map[string]func(s *scanner.StructScaner, v any) error = make(map[string]func(s *scanner.StructScaner, v any) error)
+
+func AddScanConvertDatabaseTypeFunc(key string, funcMethod func(s *scanner.StructScaner, v any) error) {
+	scanConvertByDatabaseType[key] = funcMethod
+}
+
 func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
@@ -58,8 +64,8 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 	}
 	destSlice := make([]any, 0, len(columns))
 	if t.Kind() == reflect.Struct {
-		for si := range columns {
-			destSlice = append(destSlice, &scaner.StructScaner{Index: indexMap[si]})
+		for si, v := range columns {
+			destSlice = append(destSlice, &scanner.StructScaner{Convert: scanConvertByDatabaseType[v.DatabaseTypeName()], Index: indexMap[si]})
 		}
 		return destSlice
 	} else if t.Kind() == reflect.Map {
@@ -67,19 +73,19 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 			panic(fmt.Errorf("scan map key type not string"))
 		}
 		for _, v := range columns {
-			destSlice = append(destSlice, &scaner.MapScaner{Column: v, Name: v.Name()})
+			destSlice = append(destSlice, &scanner.MapScaner{Column: v, Name: v.Name()})
 		}
 		return destSlice
 	} else if t.Kind() == reflect.Slice {
 		for i, v := range columns {
-			destSlice = append(destSlice, &scaner.SliceScaner{Column: v, Index: i})
+			destSlice = append(destSlice, &scanner.SliceScaner{Column: v, Index: i})
 		}
 		return destSlice
 	} else if t.Kind() == reflect.Func {
 		if t.NumIn() == 0 && t.NumOut() > 0 {
 			i := 0
 			for ; i < t.NumOut(); i++ {
-				destSlice = append(destSlice, &scaner.ParameterScaner{Column: columns[i]})
+				destSlice = append(destSlice, &scanner.ParameterScaner{Column: columns[i]})
 			}
 			for ; i < len(columns); i++ {
 				destSlice = append(destSlice, getTempScanDest(columns[i].ScanType()))
@@ -88,7 +94,7 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 		} else if t.NumOut() == 0 && t.NumIn() > 0 {
 			i := 0
 			for ; i < t.NumIn(); i++ {
-				destSlice = append(destSlice, &scaner.ParameterScaner{Column: columns[i]})
+				destSlice = append(destSlice, &scanner.ParameterScaner{Column: columns[i]})
 			}
 			for ; i < len(columns); i++ {
 				destSlice = append(destSlice, getTempScanDest(columns[i].ScanType()))
@@ -99,7 +105,7 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 		}
 	} else {
 		if len(columns) > 0 {
-			destSlice = append(destSlice, &scaner.ParameterScaner{Column: columns[0]})
+			destSlice = append(destSlice, &scanner.ParameterScaner{Column: columns[0]})
 			for i := 1; i < len(columns); i++ {
 				destSlice = append(destSlice, getTempScanDest(columns[i].ScanType()))
 			}
@@ -117,14 +123,14 @@ func newReceiver(rt reflect.Type, columns []*sql.ColumnType, scanRows []any) ref
 	if t.Kind() == reflect.Struct {
 		dv := ret.Elem()
 		for _, v := range scanRows {
-			if vi, ok := v.(*scaner.StructScaner); ok {
+			if vi, ok := v.(*scanner.StructScaner); ok {
 				vi.Dest = &dv
 			}
 		}
 	} else if t.Kind() == reflect.Map && t.Key().Kind() == reflect.String {
 		dest := reflect.MakeMapWithSize(reflect.MapOf(t.Key(), t.Elem()), len(columns))
 		for _, v := range scanRows {
-			if vi, ok := v.(*scaner.MapScaner); ok {
+			if vi, ok := v.(*scanner.MapScaner); ok {
 				vi.Dest = &dest
 			}
 		}
@@ -132,7 +138,7 @@ func newReceiver(rt reflect.Type, columns []*sql.ColumnType, scanRows []any) ref
 	} else if t.Kind() == reflect.Slice {
 		dest := reflect.MakeSlice(reflect.SliceOf(t.Elem()), len(columns), len(columns))
 		for _, v := range scanRows {
-			if vi, ok := v.(*scaner.SliceScaner); ok {
+			if vi, ok := v.(*scanner.SliceScaner); ok {
 				vi.Dest = &dest
 			}
 		}
@@ -147,7 +153,7 @@ func newReceiver(rt reflect.Type, columns []*sql.ColumnType, scanRows []any) ref
 				return results
 			})
 			for i, v := range scanRows {
-				if vi, ok := v.(*scaner.ParameterScaner); ok {
+				if vi, ok := v.(*scanner.ParameterScaner); ok {
 					vi.Dest = &results[i]
 				}
 			}
@@ -158,7 +164,7 @@ func newReceiver(rt reflect.Type, columns []*sql.ColumnType, scanRows []any) ref
 				results = append(results, reflect.New(t.In(i)).Elem())
 			}
 			for i, v := range scanRows {
-				if vi, ok := v.(*scaner.ParameterScaner); ok {
+				if vi, ok := v.(*scanner.ParameterScaner); ok {
 					vi.Dest = &results[i]
 				}
 			}
@@ -167,7 +173,7 @@ func newReceiver(rt reflect.Type, columns []*sql.ColumnType, scanRows []any) ref
 	} else {
 		dest := ret.Elem()
 		for _, v := range scanRows {
-			if vi, ok := v.(*scaner.ParameterScaner); ok {
+			if vi, ok := v.(*scanner.ParameterScaner); ok {
 				vi.Dest = &dest
 			}
 		}
@@ -190,7 +196,7 @@ func (sdb *SelectDB[T]) selectContextCommon(ctx context.Context, params any, nam
 	statement := getSkipFuncName(3, name)
 	rows, columns, err := sdb.query(ctx, sdb.sqldb, statement, params, name)
 	if err != nil {
-		panic(fmt.Errorf("%s->%s", statement, err))
+		panic(err)
 	}
 	defer rows.Close()
 	t := reflect.TypeOf((*T)(nil)).Elem()
@@ -200,7 +206,7 @@ func (sdb *SelectDB[T]) selectContextCommon(ctx context.Context, params any, nam
 		receiver := newReceiver(t, columns, dest)
 		err = rows.Scan(dest...)
 		if err != nil {
-			panic(fmt.Errorf("%s->%s", statement, err))
+			panic(err)
 		}
 		ret = append(ret, receiver.Interface().(T))
 	}
@@ -219,7 +225,7 @@ func (sdb *SelectDB[T]) selectFirstContextCommon(ctx context.Context, params any
 	statement := getSkipFuncName(3, name)
 	rows, columns, err := sdb.query(ctx, sdb.sqldb, statement, params, name)
 	if err != nil {
-		panic(fmt.Errorf("%s->%s", statement, err))
+		panic(err)
 	}
 	defer rows.Close()
 	t := reflect.TypeOf((*T)(nil)).Elem()
@@ -228,7 +234,7 @@ func (sdb *SelectDB[T]) selectFirstContextCommon(ctx context.Context, params any
 		receiver := newReceiver(t, columns, dest)
 		err = rows.Scan(dest...)
 		if err != nil {
-			panic(fmt.Errorf("%s->%s", statement, err))
+			panic(err)
 		}
 		return receiver.Interface().(T)
 	}

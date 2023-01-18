@@ -1,4 +1,4 @@
-package scaner
+package scanner
 
 import (
 	"database/sql"
