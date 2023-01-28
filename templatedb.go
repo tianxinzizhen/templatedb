@@ -176,6 +176,9 @@ func (db *DefaultDB) templateBuild(query string, params any) (sql string, args [
 	templateSql, templateok := db.template[query]
 	if !templateok {
 		_, query, _ := strings.Cut(query, ":")
+		if len(strings.Trim(query, "\t\n\f\r ")) == 0 {
+			return "", nil, fmt.Errorf("template sql string is empy")
+		}
 		templateSql, err = db.parse(query)
 		if err != nil {
 			return
@@ -222,22 +225,14 @@ func (db *DefaultDB) selectScanFunc(ctx context.Context, sdb sqlDB, params any, 
 	}
 	if st.NumIn() == 1 {
 		t := st.In(0)
-		sit := t
-		if t.Kind() == reflect.Pointer {
-			sit = t.Elem()
-		}
-		dest := newScanDest(columns, sit)
+		dest := newScanDest(columns, t)
 		for rows.Next() {
-			receiver := newReceiver(sit, columns, dest)
+			receiver := newReceiver(t, columns, dest)
 			err = rows.Scan(dest...)
 			if err != nil {
 				panic(err)
 			}
-			if t.Kind() == reflect.Pointer {
-				reflect.ValueOf(scanFunc).Call([]reflect.Value{receiver})
-			} else {
-				reflect.ValueOf(scanFunc).Call([]reflect.Value{receiver.Elem()})
-			}
+			reflect.ValueOf(scanFunc).Call([]reflect.Value{receiver})
 		}
 	} else {
 		dest := newScanDest(columns, st)

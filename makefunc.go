@@ -105,28 +105,28 @@ func DBFuncInit[T any](dbfuncStruct *T, tdb TemplateDB) (*T, error) {
 			if dit.NumOut() == 1 || dit.NumOut() == 2 {
 				switch dit.Out(0) {
 				case ResultType, PresultType:
-					div.Set(makeDBFunc(dit, tdb, ExecAction, fmt.Sprintf("%s.%s", dt.PkgPath(), dt.Name()), dist.Name))
+					div.Set(makeDBFunc(dit, tdb, ExecAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
 				case PrepareResultType, PprepareResultType:
-					div.Set(makeDBFunc(dit, tdb, PrepareAction, fmt.Sprintf("%s.%s", dt.PkgPath(), dt.Name()), dist.Name))
+					div.Set(makeDBFunc(dit, tdb, PrepareAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
 				default:
 					if dit.Out(0).Implements(errorType) {
 						if dit.NumIn() > 0 && dit.In(dit.NumIn()-1).Kind() == reflect.Func {
-							div.Set(makeDBFunc(dit, tdb, SelectScanAction, fmt.Sprintf("%s.%s", dt.PkgPath(), dt.Name()), dist.Name))
+							div.Set(makeDBFunc(dit, tdb, SelectScanAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
 						} else {
-							div.Set(makeDBFunc(dit, tdb, ExecNoResultAction, fmt.Sprintf("%s.%s", dt.PkgPath(), dt.Name()), dist.Name))
+							div.Set(makeDBFunc(dit, tdb, ExecNoResultAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
 						}
 					} else {
 						if dit.NumOut() == 2 && !dit.Out(1).Implements(errorType) {
 							return nil, fmt.Errorf("InitMakeFunc[%s.%s] Field[%s] Func Out type is not correct", dt.PkgPath(), dt.Name(), dist.Name)
 						}
-						div.Set(makeDBFunc(dit, tdb, SelectAction, fmt.Sprintf("%s.%s", dt.PkgPath(), dt.Name()), dist.Name))
+						div.Set(makeDBFunc(dit, tdb, SelectAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
 					}
 				}
 			} else if dit.NumOut() == 0 {
 				if dit.NumIn() > 0 && dit.In(dit.NumIn()-1).Kind() == reflect.Func {
-					div.Set(makeDBFunc(dit, tdb, SelectScanAction, fmt.Sprintf("%s.%s", dt.PkgPath(), dt.Name()), dist.Name))
+					div.Set(makeDBFunc(dit, tdb, SelectScanAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
 				} else {
-					div.Set(makeDBFunc(dit, tdb, ExecNoResultAction, fmt.Sprintf("%s.%s", dt.PkgPath(), dt.Name()), dist.Name))
+					div.Set(makeDBFunc(dit, tdb, ExecNoResultAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
 				}
 			} else {
 				return nil, fmt.Errorf("InitMakeFunc[%s.%s] Field[%s] Func In and Out type is not correct", dt.PkgPath(), dt.Name(), dist.Name)

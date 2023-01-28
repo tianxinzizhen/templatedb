@@ -190,17 +190,22 @@ func JsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
 	return false
 }
 
-func JsonConvertStruct(s *scanner.StructScaner, v any) error {
-	if v == nil {
+func JsonConvertStruct(s *scanner.StructScaner, src any) error {
+	if src == nil {
 		return nil
 	}
 	field := s.Dest.FieldByIndex(s.Index)
-	if field.Kind() == reflect.Pointer {
-		field.Set(reflect.New(field.Type().Elem()))
+	if field.Kind() == reflect.Struct {
+		if field.Kind() == reflect.Pointer {
+			field.Set(reflect.New(field.Type().Elem()))
+		} else {
+			field = field.Addr()
+		}
+		return json.Unmarshal(src.([]byte), field.Interface())
 	} else {
-		field = field.Addr()
+		return scanner.ConvertAssign(field.Addr().Interface(), src)
 	}
-	return json.Unmarshal(v.([]byte), field.Interface())
+
 }
 
 func init() {
