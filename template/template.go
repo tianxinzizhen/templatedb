@@ -35,6 +35,7 @@ type Template struct {
 	*common
 	leftDelim  string
 	rightDelim string
+	sqlParams  func(val reflect.Value) any
 }
 
 // New allocates a new, undefined template with the given name.
@@ -168,6 +169,12 @@ func (t *Template) Delims(left, right string) *Template {
 	t.init()
 	t.leftDelim = left
 	t.rightDelim = right
+	return t
+}
+
+func (t *Template) SqlParams(sqlParams func(val reflect.Value) any) *Template {
+	t.init()
+	t.sqlParams = sqlParams
 	return t
 }
 

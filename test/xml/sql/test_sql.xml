@@ -1,4 +1,4 @@
-<root pkg="github.com/tianxinzizhen/templatedb/test">
+<root pkg="github.com/tianxinzizhen/templatedb/test/xml">
     <sql common="true" name="clumns">
         id,userId,name,phone,introduction,avatar,image
     </sql>

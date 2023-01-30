@@ -13,7 +13,7 @@ import (
 	"github.com/tianxinzizhen/templatedb/util"
 )
 
-var sqlfunc template.FuncMap = make(template.FuncMap)
+var sqlFunc template.FuncMap = make(template.FuncMap)
 
 var SqlEscapeBytesBackslash = false
 
@@ -120,7 +120,7 @@ func like(param reflect.Value) (string, []any) {
 	return " like ? ", args
 }
 
-func sqlescape(list ...reflect.Value) (string, error) {
+func sqlEscape(list ...reflect.Value) (string, error) {
 	sb := strings.Builder{}
 	for i, v := range list {
 		if i > 0 {
@@ -144,8 +144,8 @@ func orNull(list ...reflect.Value) (string, []any) {
 		}
 		sb.WriteByte('?')
 		vi := v.Interface()
-		isTure, _ := template.IsTrue(vi)
-		if isTure {
+		isTrue, _ := template.IsTrue(vi)
+		if isTrue {
 			args[i] = vi
 		}
 	}
@@ -161,8 +161,8 @@ func marshal(list ...reflect.Value) (string, []any, error) {
 		}
 		sb.WriteByte('?')
 		vi := v.Interface()
-		isTure, _ := template.IsTrue(vi)
-		if isTure {
+		isTrue, _ := template.IsTrue(vi)
+		if isTrue {
 			mJson, err := json.Marshal(vi)
 			if err != nil {
 				return "", nil, err
@@ -190,11 +190,10 @@ func JsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
 	return false
 }
 
-func JsonConvertStruct(s *scanner.StructScaner, src any) error {
+func JsonConvertStruct(field reflect.Value, src any) error {
 	if src == nil {
 		return nil
 	}
-	field := s.Dest.FieldByIndex(s.Index)
 	if field.Kind() == reflect.Struct {
 		if field.Kind() == reflect.Pointer {
 			field.Set(reflect.New(field.Type().Elem()))
@@ -214,7 +213,7 @@ func init() {
 	AddTemplateFunc("in", inParam)
 	AddTemplateFunc("like", like)
 	AddTemplateFunc("param", params)
-	AddTemplateFunc("sqlescape", sqlescape)
+	AddTemplateFunc("sqlEscape", sqlEscape)
 	AddTemplateFunc("orNull", orNull)
 	AddTemplateFunc("marshal", marshal)
 	//模版@#号字符串拼接时对字段值转化成sql字符串函数
@@ -226,5 +225,5 @@ func init() {
 }
 
 func AddTemplateFunc(key string, funcMethod any) {
-	sqlfunc[key] = funcMethod
+	sqlFunc[key] = funcMethod
 }

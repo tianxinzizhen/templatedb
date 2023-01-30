@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tianxinzizhen/templatedb/load"
+	commentStruct "github.com/tianxinzizhen/templatedb/load/comment/cstruct"
 	"github.com/tianxinzizhen/templatedb/load/xml"
 	"github.com/tianxinzizhen/templatedb/template"
 )
@@ -21,11 +22,10 @@ type sqlDB interface {
 }
 
 type actionDB interface {
-	query(ctx context.Context, adb sqlDB, statement string, params any, name []any) (*sql.Rows, []*sql.ColumnType, error)
 	selectScanFunc(ctx context.Context, adb sqlDB, params any, scanFunc any, name []any)
 	exec(ctx context.Context, adb sqlDB, params any, name []any) (lastInsertId, rowsAffected int64)
 	prepareExecContext(ctx context.Context, adb sqlDB, params []any, name []any) (rowsAffected int64)
-	selectCommon(ctx context.Context, sdb sqlDB, params any, t reflect.Type, name []any) reflect.Value
+	selectCommon(ctx context.Context, sdb sqlDB, params any, t reflect.Type, cap int, name []any) reflect.Value
 }
 
 type TemplateDB interface {
@@ -58,6 +58,7 @@ type DefaultDB struct {
 	sqlDB                   *sql.DB
 	template                map[string]*template.Template
 	delimsLeft, delimsRight string
+	sqlParams               func(val reflect.Value) any
 }
 
 func getSkipFuncName(skip int, name []any) string {
@@ -80,6 +81,13 @@ func Delims(delimsLeft, delimsRight string) func(*DefaultDB) error {
 	}
 }
 
+func SqlParams(sqlParams func(val reflect.Value) any) func(*DefaultDB) error {
+	return func(db *DefaultDB) error {
+		db.sqlParams = sqlParams
+		return nil
+	}
+}
+
 func LoadSqlOfXml(sqlDirs ...embed.FS) func(*DefaultDB) error {
 	return func(db *DefaultDB) error {
 		if db.template == nil {
@@ -95,7 +103,22 @@ func LoadSqlOfXml(sqlDirs ...embed.FS) func(*DefaultDB) error {
 	}
 }
 
-func LoadSqlOfBytes(xmlSqls ...[]byte) func(*DefaultDB) error {
+func LoadSqlOfCommentStruct(pkg string, sqlDirs ...embed.FS) func(*DefaultDB) error {
+	return func(db *DefaultDB) error {
+		if db.template == nil {
+			db.template = make(map[string]*template.Template)
+		}
+		for _, v := range sqlDirs {
+			err := commentStruct.LoadTemplateStatements(pkg, v, db.template, db.parse)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+func LoadSqlOfXmlBytes(xmlSqls ...[]byte) func(*DefaultDB) error {
 	return func(db *DefaultDB) error {
 		if db.template == nil {
 			db.template = make(map[string]*template.Template)
@@ -110,7 +133,7 @@ func LoadSqlOfBytes(xmlSqls ...[]byte) func(*DefaultDB) error {
 	}
 }
 
-func LoadSqlOfString(xmlSqls ...string) func(*DefaultDB) error {
+func LoadSqlOfXmlString(xmlSqls ...string) func(*DefaultDB) error {
 	return func(db *DefaultDB) error {
 		if db.template == nil {
 			db.template = make(map[string]*template.Template)
@@ -140,6 +163,14 @@ func NewDefaultDB(sqlDB *sql.DB, options ...func(*DefaultDB) error) (*DefaultDB,
 	return db, nil
 }
 
+func (db *DefaultDB) LoadSqlOfXml(sqlDirs embed.FS) error {
+	return LoadSqlOfXml(sqlDirs)(db)
+}
+
+func (db *DefaultDB) LoadSqlOfCommentStruct(pkg string, sqlDirs embed.FS) error {
+	return LoadSqlOfCommentStruct(pkg, sqlDirs)(db)
+}
+
 func (db *DefaultDB) Recover(errp *error) {
 	if *errp == nil {
 		e := recover()
@@ -156,7 +187,7 @@ func (db *DefaultDB) Recover(errp *error) {
 }
 
 func (db *DefaultDB) parse(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error) {
-	templateSql, err := template.New("").Delims(db.delimsLeft, db.delimsRight).Funcs(sqlfunc).Parse(parse)
+	templateSql, err := template.New("").Delims(db.delimsLeft, db.delimsRight).SqlParams(db.sqlParams).Funcs(sqlFunc).Parse(parse)
 	if err != nil {
 		return nil, err
 	}
@@ -186,22 +217,6 @@ func (db *DefaultDB) templateBuild(query string, params any) (sql string, args [
 		db.template[query] = templateSql
 	}
 	return templateSql.ExecuteBuilder(params)
-}
-
-func (db *DefaultDB) query(ctx context.Context, sdb sqlDB, statement string, params any, name []any) (*sql.Rows, []*sql.ColumnType, error) {
-	sql, args, err := db.templateBuild(statement, params)
-	if err != nil {
-		return nil, nil, err
-	}
-	rows, err := sdb.QueryContext(ctx, sql, args...)
-	if err != nil {
-		return nil, nil, err
-	}
-	columns, err := rows.ColumnTypes()
-	if err != nil {
-		return nil, nil, err
-	}
-	return rows, columns, nil
 }
 
 func (db *DefaultDB) selectScanFunc(ctx context.Context, sdb sqlDB, params any, scanFunc any, name []any) {
@@ -247,7 +262,7 @@ func (db *DefaultDB) selectScanFunc(ctx context.Context, sdb sqlDB, params any, 
 	}
 }
 
-func (db *DefaultDB) selectCommon(ctx context.Context, sdb sqlDB, params any, t reflect.Type, name []any) reflect.Value {
+func (db *DefaultDB) selectCommon(ctx context.Context, sdb sqlDB, params any, t reflect.Type, cap int, name []any) reflect.Value {
 	statement := getSkipFuncName(3, name)
 	sql, args, err := db.templateBuild(statement, params)
 	if err != nil {
@@ -265,7 +280,10 @@ func (db *DefaultDB) selectCommon(ctx context.Context, sdb sqlDB, params any, t 
 	var ret reflect.Value
 	st := t
 	if t.Kind() == reflect.Slice {
-		ret = reflect.MakeSlice(t, 0, 10)
+		if cap <= 0 {
+			cap = 10
+		}
+		ret = reflect.MakeSlice(t, 0, cap)
 		st = t.Elem()
 	} else {
 		ret = reflect.New(t).Elem()
@@ -365,8 +383,9 @@ func (db *DefaultDB) SelectScanFunc(params any, scanFunc any, name ...any) {
 func (db *DefaultDB) SelectScanFuncContext(ctx context.Context, params any, scanFunc any, name ...any) {
 	db.selectScanFunc(ctx, db.sqlDB, params, scanFunc, name)
 }
+
 func (db *DefaultDB) selectByType(ctx context.Context, params any, t reflect.Type, name ...any) reflect.Value {
-	return db.selectCommon(ctx, db.sqlDB, params, t, name)
+	return db.selectCommon(ctx, db.sqlDB, params, t, 0, name)
 }
 
 func (db *DefaultDB) Begin() (*TemplateTxDB, error) {
@@ -430,5 +449,5 @@ func (tx *TemplateTxDB) SelectScanFuncContext(ctx context.Context, params any, s
 }
 
 func (tx *TemplateTxDB) selectByType(ctx context.Context, params any, t reflect.Type, name ...any) reflect.Value {
-	return tx.selectCommon(ctx, tx.tx, params, t, name)
+	return tx.selectCommon(ctx, tx.tx, params, t, 0, name)
 }

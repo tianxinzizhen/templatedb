@@ -6,29 +6,29 @@ import (
 	"time"
 )
 
-type StructScaner struct {
+type StructScanner struct {
 	Dest    reflect.Value
-	Convert func(s *StructScaner, v any) error
+	Convert func(field reflect.Value, v any) error
 	Index   []int
 }
 
-func (s *StructScaner) Scan(src any) error {
+func (s *StructScanner) Scan(src any) error {
 	if src == nil {
 		return nil
 	}
 	if s.Convert != nil {
-		return s.Convert(s, src)
+		return s.Convert(s.Dest.FieldByIndex(s.Index), src)
 	}
 	return ConvertAssign(s.Dest.FieldByIndex(s.Index).Addr().Interface(), src)
 }
 
-type MapScaner struct {
+type MapScanner struct {
 	Dest   reflect.Value
 	Column *sql.ColumnType
 	Name   string
 }
 
-func (s *MapScaner) Scan(src any) error {
+func (s *MapScanner) Scan(src any) error {
 	if src == nil {
 		return nil
 	} else {
@@ -43,13 +43,13 @@ func (s *MapScaner) Scan(src any) error {
 	}
 }
 
-type SliceScaner struct {
+type SliceScanner struct {
 	Dest   reflect.Value
 	Column *sql.ColumnType
 	Index  int
 }
 
-func (s *SliceScaner) Scan(src any) error {
+func (s *SliceScanner) Scan(src any) error {
 	if src == nil {
 		return nil
 	} else {
@@ -64,12 +64,13 @@ func (s *SliceScaner) Scan(src any) error {
 	}
 }
 
-type ParameterScaner struct {
-	Dest   reflect.Value
-	Column *sql.ColumnType
+type ParameterScanner struct {
+	Dest    reflect.Value
+	Column  *sql.ColumnType
+	Convert func(field reflect.Value, v any) error
 }
 
-func (s *ParameterScaner) Scan(src any) error {
+func (s *ParameterScanner) Scan(src any) error {
 	if src == nil {
 		return nil
 	} else {
@@ -77,6 +78,9 @@ func (s *ParameterScaner) Scan(src any) error {
 		dest := reflect.New(s.Column.ScanType()).Interface()
 		ConvertAssign(dest, src)
 		sc := scanTypeConvert(dest)
+		if s.Convert != nil {
+			return s.Convert(s.Dest, src)
+		}
 		if sc.CanConvert(vt) {
 			s.Dest.Set(sc.Convert(vt))
 		}

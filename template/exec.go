@@ -278,7 +278,7 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 		if len(node.Pipe.Decl) == 0 {
 			s.printValue(node, val)
 		}
-	case *parse.AtsignNode:
+	case *parse.AtSignNode:
 		// Do not pop variables so they persist until next end.
 		// Also, if the action declares variables, don't print the result.
 		s.evalAtSign(dot, node)
@@ -308,10 +308,15 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 	}
 }
 
-func (s *state) evalAtSign(dot reflect.Value, node *parse.AtsignNode) {
+func (s *state) evalAtSign(dot reflect.Value, node *parse.AtSignNode) {
 	receiver := s.varValue(node.Vars[len(node.Vars)-1])
 	val := s.evalField(dot, node.Text, node, nil, missingVal, receiver)
-	arg := val.Interface()
+	var arg any
+	if s.tmpl.sqlParams != nil {
+		arg = s.tmpl.sqlParams(val)
+	} else {
+		arg = val.Interface()
+	}
 	if node.SuffixQuestionMark {
 		truth, _ := isTrue(val)
 		if !truth {

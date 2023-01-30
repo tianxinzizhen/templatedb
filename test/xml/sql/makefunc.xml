@@ -1,4 +1,4 @@
-<root pkg="github.com/tianxinzizhen/templatedb/test.MTest">
+<root pkg="github.com/tianxinzizhen/templatedb/test/xml.MTest">
     <sql func="Select">
         select * from tbl_test
     </sql>

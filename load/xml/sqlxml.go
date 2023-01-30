@@ -64,7 +64,7 @@ func LoadTemplateStatements(sqlDir embed.FS, template map[string]*template.Templ
 }
 
 func LoadTemplateStatementsOfBytes(xmlSqls []byte, template map[string]*template.Template, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) error {
-	if xmlSqls != nil {
+	if xmlSqls == nil {
 		return errors.New("sql xml bytes is nil")
 	}
 	sqlRoot := SqlStatementRoot{}
@@ -86,25 +86,7 @@ func LoadTemplateStatementsOfBytes(xmlSqls []byte, template map[string]*template
 }
 
 func LoadTemplateStatementsOfString(xmlSqls string, template map[string]*template.Template, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) error {
-	if len(xmlSqls) == 0 {
-		return errors.New("sql xml string length is 0")
-	}
-	sqlRoot := SqlStatementRoot{}
-	err := xml.Unmarshal([]byte(xmlSqls), &sqlRoot)
-	if err != nil {
-		return err
-	}
-	addParseTree := addCommonTemplate(sqlRoot.Sql, parse)
-	for _, v := range sqlRoot.Sql {
-		if !v.Common {
-			key := fmt.Sprintf("%s.%s:%s", sqlRoot.Pkg, v.Func, v.Name)
-			template[key], err = parse(v.Statement, addParseTree)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return LoadTemplateStatementsOfBytes([]byte(xmlSqls), template, parse)
 }
 
 func addCommonTemplate(sqls []Sql, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) func(*template.Template) error {

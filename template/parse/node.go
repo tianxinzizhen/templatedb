@@ -153,8 +153,8 @@ func (t *TextNode) Copy() Node {
 	return &TextNode{tr: t.tr, NodeType: NodeText, Pos: t.Pos, Text: append([]byte{}, t.Text...)}
 }
 
-// AtsignNode holds plain text.
-type AtsignNode struct {
+// AtSignNode holds plain text.
+type AtSignNode struct {
 	NodeType
 	Pos
 	tr                 *Tree
@@ -164,7 +164,7 @@ type AtsignNode struct {
 	SuffixQuestionMark bool     // is enable question mark
 }
 
-func (t *Tree) newAtSign(pos Pos, text string, vars []string) *AtsignNode {
+func (t *Tree) newAtSign(pos Pos, text string, vars []string) *AtSignNode {
 	fieldName := text
 	prefixPoundSign := false
 	suffixQuestionMark := false
@@ -176,23 +176,23 @@ func (t *Tree) newAtSign(pos Pos, text string, vars []string) *AtsignNode {
 		fieldName = strings.TrimSuffix(fieldName, "?")
 		suffixQuestionMark = true
 	}
-	return &AtsignNode{tr: t, NodeType: NodeAtSign, Pos: pos, Text: fieldName, Vars: vars, PrefixPoundSign: prefixPoundSign, SuffixQuestionMark: suffixQuestionMark}
+	return &AtSignNode{tr: t, NodeType: NodeAtSign, Pos: pos, Text: fieldName, Vars: vars, PrefixPoundSign: prefixPoundSign, SuffixQuestionMark: suffixQuestionMark}
 }
 
-func (t *AtsignNode) String() string {
+func (t *AtSignNode) String() string {
 	return fmt.Sprintf("@%s", t.Text)
 }
 
-func (t *AtsignNode) writeTo(sb *strings.Builder) {
+func (t *AtSignNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(t.String())
 }
 
-func (t *AtsignNode) tree() *Tree {
+func (t *AtSignNode) tree() *Tree {
 	return t.tr
 }
 
-func (t *AtsignNode) Copy() Node {
-	return &AtsignNode{tr: t.tr, NodeType: NodeText, Pos: t.Pos, Text: t.Text}
+func (t *AtSignNode) Copy() Node {
+	return &AtSignNode{tr: t.tr, NodeType: NodeText, Pos: t.Pos, Text: t.Text}
 }
 
 // CommentNode holds a comment.

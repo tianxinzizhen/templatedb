@@ -11,12 +11,10 @@ import (
 )
 
 var (
-	contextType        = reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType          = reflect.TypeOf((*error)(nil)).Elem()
-	PresultType        = reflect.TypeOf((*Result)(nil))
-	PprepareResultType = reflect.TypeOf((*PrepareResult)(nil))
-	ResultType         = PresultType.Elem()
-	PrepareResultType  = PprepareResultType.Elem()
+	contextType       = reflect.TypeOf((*context.Context)(nil)).Elem()
+	errorType         = reflect.TypeOf((*error)(nil)).Elem()
+	ResultType        = reflect.TypeOf((*Result)(nil))
+	PrepareResultType = reflect.TypeOf((*PrepareResult)(nil))
 )
 
 type Operation int
@@ -46,8 +44,8 @@ type PrepareResult struct {
 }
 
 // 自动初始化构造方法
-func DBFuncInit[T any](dbfuncStruct *T, tdb TemplateDB) (*T, error) {
-	dv, isNil := util.Indirect(reflect.ValueOf(dbfuncStruct))
+func DBFuncInit[T any](dbFuncStruct *T, tdb TemplateDB) (*T, error) {
+	dv, isNil := util.Indirect(reflect.ValueOf(dbFuncStruct))
 	if isNil {
 		return nil, errors.New("InitMakeFunc In(0) is nil")
 	}
@@ -104,9 +102,9 @@ func DBFuncInit[T any](dbfuncStruct *T, tdb TemplateDB) (*T, error) {
 			}
 			if dit.NumOut() == 1 || dit.NumOut() == 2 {
 				switch dit.Out(0) {
-				case ResultType, PresultType:
+				case ResultType, ResultType.Elem():
 					div.Set(makeDBFunc(dit, tdb, ExecAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
-				case PrepareResultType, PprepareResultType:
+				case PrepareResultType, PrepareResultType.Elem():
 					div.Set(makeDBFunc(dit, tdb, PrepareAction, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name), ""))
 				default:
 					if dit.Out(0).Implements(errorType) {
@@ -133,7 +131,7 @@ func DBFuncInit[T any](dbfuncStruct *T, tdb TemplateDB) (*T, error) {
 			}
 		}
 	}
-	return dbfuncStruct, nil
+	return dbFuncStruct, nil
 }
 
 func makeDBFunc(t reflect.Type, tdb TemplateDB, action Operation, pkg, fieldName string) reflect.Value {
@@ -175,7 +173,7 @@ func makeDBFunc(t reflect.Type, tdb TemplateDB, action Operation, pkg, fieldName
 		case ExecAction:
 			lastInsertId, rowsAffected := tdb.ExecContext(ctx, param, pkg, fieldName)
 			result := reflect.ValueOf(&Result{LastInsertId: lastInsertId, RowsAffected: rowsAffected})
-			if t.Out(0) == ResultType || t.Out(0) == PresultType {
+			if t.Out(0) == ResultType || t.Out(0) == ResultType.Elem() {
 				if t.Out(0).Kind() == reflect.Pointer {
 					results[0] = result
 				} else {
@@ -192,7 +190,7 @@ func makeDBFunc(t reflect.Type, tdb TemplateDB, action Operation, pkg, fieldName
 			}
 			rowsAffected := tdb.PrepareExecContext(ctx, pvs, pkg, fieldName)
 			prepareResult := reflect.ValueOf(&PrepareResult{RowsAffected: rowsAffected})
-			if t.Out(0) == PrepareResultType || t.Out(0) == PprepareResultType {
+			if t.Out(0) == PrepareResultType || t.Out(0) == PrepareResultType.Elem() {
 				if t.Out(0).Kind() == reflect.Pointer {
 					results[0] = prepareResult
 				} else {

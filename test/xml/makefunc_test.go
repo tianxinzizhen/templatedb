@@ -1,4 +1,4 @@
-package test
+package xml
 
 import (
 	"context"
