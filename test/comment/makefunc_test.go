@@ -2,7 +2,6 @@ package comment
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"fmt"
 	"reflect"
@@ -10,6 +9,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/tianxinzizhen/templatedb"
+	"github.com/tianxinzizhen/templatedb/test"
 )
 
 type GoodShop struct {
@@ -64,12 +64,12 @@ var pkg = reflect.TypeOf((*MTest)(nil)).Elem().PkgPath()
 var sqlDir embed.FS
 
 func getDB() (*templatedb.DefaultDB, error) {
-	sqldb, err := sql.Open("mysql", "root:lz@3306!@tcp(mysql.local.lezhichuyou.com:3306)/lz_tour_lix?charset=utf8mb4&parseTime=True&loc=Local&multiStatements=true")
+	tdb, err := test.GetDB()
 	if err != nil {
 		return nil, err
 	}
-	templatedb.RecoverPrintf = fmt.Printf
-	return templatedb.NewDefaultDB(sqldb, templatedb.LoadSqlOfCommentStruct(pkg, sqlDir))
+	tdb.LoadSqlOfXml(sqlDir)
+	return tdb, nil
 }
 
 func TestMakeSelectFunc(t *testing.T) {

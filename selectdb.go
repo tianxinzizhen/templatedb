@@ -2,6 +2,8 @@ package templatedb
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"reflect"
 )
 
@@ -27,17 +29,65 @@ func (sdb *SelectDB[T]) SliceLen(sliceLen int) *SelectDB[T] {
 	return sdb
 }
 
-func (sdb *SelectDB[T]) Select(params any, name ...any) []T {
-	return sdb.selectCommon(context.Background(), sdb.sqldb, params, reflect.SliceOf(sdb.t), sdb.sliceLen, name).Interface().([]T)
-}
-func (sdb *SelectDB[T]) SelectContext(ctx context.Context, params any, name ...any) []T {
-	return sdb.selectCommon(ctx, sdb.sqldb, params, reflect.SliceOf(sdb.t), sdb.sliceLen, name).Interface().([]T)
+func (sdb *SelectDB[T]) Select(params any, name ...any) T {
+	return sdb.selectCommon(context.Background(), sdb.sqldb, params, sdb.t, sdb.sliceLen, name).Interface().(T)
 }
 
-func (sdb *SelectDB[T]) SelectFirst(params any, name ...any) T {
-	return sdb.selectCommon(context.Background(), sdb.sqldb, params, sdb.t, 0, name).Interface().(T)
+func (sdb *SelectDB[T]) SelectContext(ctx context.Context, params any, name ...any) T {
+	return sdb.selectCommon(ctx, sdb.sqldb, params, sdb.t, sdb.sliceLen, name).Interface().(T)
 }
 
-func (sdb *SelectDB[T]) SelectFirstContext(ctx context.Context, params any, name ...any) T {
-	return sdb.selectCommon(ctx, sdb.sqldb, params, sdb.t, 0, name).Interface().(T)
+func DBConvertRows[T any](rows *sql.Rows) (T, error) {
+	return DBConvertRowsCap[T](rows, 0)
+}
+
+func DBConvertRowsCap[T any](rows *sql.Rows, cap int) (T, error) {
+	t := reflect.TypeOf((*T)(nil)).Elem()
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return reflect.Zero(t).Interface().(T), err
+	}
+	var ret reflect.Value
+	st := t
+	if t.Kind() == reflect.Slice {
+		if cap <= 0 {
+			cap = 10
+		}
+		ret = reflect.MakeSlice(t, 0, cap)
+		st = t.Elem()
+	} else {
+		ret = reflect.New(t).Elem()
+	}
+	dest := newScanDest(columns, st)
+	for rows.Next() {
+		receiver := newReceiver(st, columns, dest)
+		err = rows.Scan(dest...)
+		if err != nil {
+			return reflect.Zero(t).Interface().(T), err
+		}
+		if t.Kind() == reflect.Slice {
+			ret = reflect.Append(ret, receiver)
+		} else {
+			return receiver.Interface().(T), nil
+		}
+	}
+	return ret.Interface().(T), nil
+}
+
+func DBConvertRow[T any](rows *sql.Rows) (T, error) {
+	t := reflect.TypeOf((*T)(nil)).Elem()
+	columns, err := rows.ColumnTypes()
+	if err != nil {
+		return reflect.Zero(t).Interface().(T), err
+	}
+	if t.Kind() == reflect.Slice {
+		return reflect.Zero(t).Interface().(T), fmt.Errorf("DBConvertRow not Convert Slice")
+	}
+	dest := newScanDest(columns, t)
+	receiver := newReceiver(t, columns, dest)
+	err = rows.Scan(dest...)
+	if err != nil {
+		return reflect.Zero(t).Interface().(T), err
+	}
+	return receiver.Interface().(T), nil
 }

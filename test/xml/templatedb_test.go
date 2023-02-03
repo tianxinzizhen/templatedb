@@ -1,7 +1,6 @@
 package xml
 
 import (
-	"database/sql"
 	"embed"
 	"fmt"
 	"testing"
@@ -9,6 +8,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/tianxinzizhen/templatedb"
+	"github.com/tianxinzizhen/templatedb/test"
 )
 
 //go:embed sql
@@ -26,12 +26,12 @@ type GoodShop struct {
 }
 
 func getDB() (*templatedb.DefaultDB, error) {
-	sqldb, err := sql.Open("mysql", "root:lz@3306!@tcp(mysql.local.lezhichuyou.com:3306)/lz_tour_lix?charset=utf8mb4&parseTime=True&loc=Local&multiStatements=true")
+	tdb, err := test.GetDB()
 	if err != nil {
 		return nil, err
 	}
-	templatedb.RecoverPrintf = fmt.Printf
-	return templatedb.NewDefaultDB(sqldb, templatedb.LoadSqlOfXml(sqlDir))
+	tdb.LoadSqlOfXml(sqlDir)
+	return tdb, nil
 }
 
 func TestGetDb(t *testing.T) {
@@ -99,7 +99,7 @@ func TestInFunction(t *testing.T) {
 	}
 	defer db.Recover(&err)
 	for _, tp := range TestInFunctionParams {
-		ret := templatedb.DBSelect[GoodShop](db).Select(tp.param, tp.name)
+		ret := templatedb.DBSelect[[]GoodShop](db).Select(tp.param, tp.name)
 		for _, v := range ret {
 			fmt.Printf("%#v\n", v)
 		}
@@ -192,7 +192,7 @@ func TestFunc(t *testing.T) {
 		t.Error(err)
 	}
 	defer db.Recover(&err)
-	ret := templatedb.DBSelect[func() (int, string)](db).Select(nil, TestSelect, "all")
+	ret := templatedb.DBSelect[[]func() (int, string)](db).Select(nil, TestSelect, "all")
 	for _, v := range ret {
 		id, name := v()
 		fmt.Printf("%#v,%#v\n", id, name)
@@ -210,17 +210,17 @@ func TestInsertTime(t *testing.T) {
 	})
 }
 
-func TestQeryString(t *testing.T) {
+func TestQueryString(t *testing.T) {
 	db, err := getDB()
 	defer db.Recover(&err)
-	ret := templatedb.DBSelect[func() (int, string)](db).Select(nil, "select UserId, Name FROM tbl_test")
+	ret := templatedb.DBSelect[[]func() (int, string)](db).Select(nil, "select UserId, Name FROM tbl_test")
 	for _, v := range ret {
 		id, name := v()
 		fmt.Printf("%#v,%#v\n", id, name)
 	}
 }
 
-func TestQeryString1(t *testing.T) {
+func TestQueryString1(t *testing.T) {
 	db, err := getDB()
 	defer db.Recover(&err)
 	db.SelectScanFunc(nil, func(id int, name string) {

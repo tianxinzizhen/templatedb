@@ -187,6 +187,11 @@ func JsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
 			return true
 		}
 	}
+	if asName, ok := tag.Lookup("as"); ok {
+		if fieldName == asName {
+			return true
+		}
+	}
 	return false
 }
 
@@ -224,6 +229,11 @@ func init() {
 	AddScanConvertDatabaseTypeFunc("JSON", JsonConvertStruct)
 }
 
-func AddTemplateFunc(key string, funcMethod any) {
-	sqlFunc[key] = funcMethod
+func AddTemplateFunc(key string, funcMethod any) error {
+	if _, ok := sqlFunc[key]; ok {
+		return fmt.Errorf("add template func[%s] already exists ", key)
+	} else {
+		sqlFunc[key] = funcMethod
+	}
+	return nil
 }
