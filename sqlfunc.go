@@ -1,11 +1,15 @@
 package templatedb
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/tianxinzizhen/templatedb/scanner"
 	"github.com/tianxinzizhen/templatedb/template"
@@ -14,6 +18,8 @@ import (
 )
 
 var sqlFunc template.FuncMap = make(template.FuncMap)
+
+var sqlParamType map[reflect.Type]struct{} = make(map[reflect.Type]struct{})
 
 var SqlEscapeBytesBackslash = false
 
@@ -46,7 +52,8 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 	if list.Kind() == reflect.Slice || list.Kind() == reflect.Array {
 		sb := strings.Builder{}
 		sb.WriteString("in (")
-		var args []any = make([]any, list.Len())
+		var args []any = make([]any, 0, list.Len())
+		exists := make(map[any]any)
 		for i := 0; i < list.Len(); i++ {
 			if i > 0 {
 				sb.WriteByte(',')
@@ -61,13 +68,17 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 			}
 			switch item.Kind() {
 			case reflect.Struct:
-				tField, ok := template.GetFieldByName(item.Type(), fieldName)
+				tField, ok := template.GetFieldByName(item.Type(), fieldName, nil)
 				if ok {
 					field, err := item.FieldByIndexErr(tField.Index)
 					if err != nil {
 						return "", nil, err
 					}
-					args[i] = field.Interface()
+					val := field.Interface()
+					if _, ok := exists[val]; !ok {
+						exists[val] = struct{}{}
+						args = append(args, val)
+					}
 				} else {
 					return "", nil, fmt.Errorf("in params : The attribute %s was not found in the structure %s.%s", fieldName, item.Type().PkgPath(), item.Type().Name())
 				}
@@ -75,7 +86,11 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 				if item.Type().Key().Kind() == reflect.String {
 					fieldValue := item.MapIndex(reflect.ValueOf(fieldName))
 					if fieldValue.IsValid() {
-						args[i] = fieldValue.Interface()
+						val := fieldValue.Interface()
+						if _, ok := exists[val]; !ok {
+							exists[val] = struct{}{}
+							args = append(args, val)
+						}
 					} else {
 						return "", nil, fmt.Errorf("in params : fieldValue in map[%s] IsValid", fieldName)
 					}
@@ -83,7 +98,11 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 					return "", nil, fmt.Errorf("in params : Map key Type is not string")
 				}
 			default:
-				args[i] = item.Interface()
+				val := item.Interface()
+				if _, ok := exists[val]; !ok {
+					exists[val] = struct{}{}
+					args = append(args, val)
+				}
 			}
 		}
 		sb.WriteString(")")
@@ -199,13 +218,14 @@ func JsonConvertStruct(field reflect.Value, src any) error {
 	if src == nil {
 		return nil
 	}
-	if field.Kind() == reflect.Struct {
-		if field.Kind() == reflect.Pointer {
+	if field.Kind() == reflect.Pointer {
+		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
-		} else {
-			field = field.Addr()
 		}
-		return json.Unmarshal(src.([]byte), field.Interface())
+		field = field.Elem()
+	}
+	if field.Kind() == reflect.Struct || field.Kind() == reflect.Slice || field.Kind() == reflect.Map {
+		return json.Unmarshal(src.([]byte), field.Addr().Interface())
 	} else {
 		return scanner.ConvertAssign(field.Addr().Interface(), src)
 	}
@@ -227,6 +247,8 @@ func init() {
 	template.TagAsFieldName = JsonTagAsFieldName
 	//mysql的json字段处理
 	AddScanConvertDatabaseTypeFunc("JSON", JsonConvertStruct)
+	//添加时间为sql参数类型
+	AddSqlParamType(reflect.TypeOf(time.Time{}))
 }
 
 func AddTemplateFunc(key string, funcMethod any) error {
@@ -236,4 +258,29 @@ func AddTemplateFunc(key string, funcMethod any) error {
 		sqlFunc[key] = funcMethod
 	}
 	return nil
+}
+func AddSqlParamType(t reflect.Type) {
+	sqlParamType[t] = struct{}{}
+}
+
+var RecoverPrintf func(format string, a ...any) (n int, err error)
+
+func recoverPrintf(err error) {
+	if RecoverPrintf != nil && err != nil {
+		var pc []uintptr = make([]uintptr, MaxStackLen)
+		n := runtime.Callers(3, pc[:])
+		frames := runtime.CallersFrames(pc[:n])
+		RecoverPrintf("%s \n", err)
+		for frame, more := frames.Next(); more; frame, more = frames.Next() {
+			RecoverPrintf("%s:%d \n", frame.File, frame.Line)
+		}
+	}
+}
+
+var MaxStackLen = 50
+
+type sqlDB interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 }

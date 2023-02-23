@@ -38,8 +38,9 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 	destSlice := make([]any, 0, len(columns))
 	if t.Kind() == reflect.Struct {
 		indexMap := make(map[int][]int, len(columns))
+		scanMapIndex := make(map[string]int)
 		for i, item := range columns {
-			f, ok := template.GetFieldByName(t, item.Name())
+			f, ok := template.GetFieldByName(t, item.Name(), scanMapIndex)
 			if ok {
 				indexMap[i] = f.Index
 			} else {

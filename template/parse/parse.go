@@ -369,6 +369,8 @@ func (t *Tree) textOrAction() Node {
 		return t.newText(token.pos, token.val)
 	case itemAtSign:
 		return t.newAtSign(token.pos, token.val, t.vars)
+	case itemParam:
+		return t.newSqlParamNode(token.pos)
 	case itemLeftDelim:
 		t.actionLine = token.line
 		defer t.clearActionLine()

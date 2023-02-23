@@ -76,7 +76,7 @@ const (
 
 	//new add sql type
 	itemAtSign //@ sign
-
+	itemParam  //? 参数化
 )
 
 var key = map[string]itemType{
@@ -265,11 +265,26 @@ const (
 
 // lexText scans until an opening action delimiter, "{{".
 func lexText(l *lexer) stateFn {
-	if x := strings.Index(l.input[l.pos:], l.atSign); x >= 0 {
-		lx := strings.Index(l.input[l.pos:], l.leftDelim)
-		if x < lx || lx == -1 {
-			l.pos += Pos(x)
-			if x > 0 && l.pos > l.start {
+	qx := strings.Index(l.input[l.pos:], "?")
+	atx := strings.Index(l.input[l.pos:], l.atSign)
+	lx := strings.Index(l.input[l.pos:], l.leftDelim)
+	if qx >= 0 {
+		if (qx < atx && (atx < lx || lx == -1)) || (qx < lx && atx == -1) || (atx == -1 && lx == -1) {
+			l.pos += Pos(qx)
+			if qx > 0 && l.pos > l.start {
+				l.line += strings.Count(l.input[l.start:l.pos], "\n")
+				l.emit(itemText)
+			}
+			l.pos += Pos(1)
+			l.ignore()
+			l.emit(itemParam)
+			return lexText
+		}
+	}
+	if atx >= 0 {
+		if atx < lx || lx == -1 {
+			l.pos += Pos(atx)
+			if atx > 0 && l.pos > l.start {
 				l.line += strings.Count(l.input[l.start:l.pos], "\n")
 				l.emit(itemText)
 			}
@@ -278,9 +293,9 @@ func lexText(l *lexer) stateFn {
 			return lexAtSign
 		}
 	}
-	if x := strings.Index(l.input[l.pos:], l.leftDelim); x >= 0 {
+	if lx >= 0 {
 		ldn := Pos(len(l.leftDelim))
-		l.pos += Pos(x)
+		l.pos += Pos(lx)
 		trimLength := Pos(0)
 		if hasLeftTrimMarker(l.input[l.pos+ldn:]) {
 			trimLength = rightTrimLength(l.input[l.start:l.pos])

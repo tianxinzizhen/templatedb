@@ -43,6 +43,8 @@ type state struct {
 	vars  []variable // push-down stack of variable values.
 	depth int        // the height of the stack of executing templates.
 	args  []any      // sql参数列表
+	qi    int
+	qArgs []any
 }
 
 // variable holds the dynamic value of a variable such as $, $x etc.
@@ -190,7 +192,7 @@ func (t *Template) ExecuteTemplate(wr io.Writer, name string, data any) ([]any, 
 	if tmpl == nil {
 		return nil, fmt.Errorf("template: no template %q associated with template %q", name, t.name)
 	}
-	return tmpl.Execute(wr, data)
+	return tmpl.Execute(wr, data, nil)
 }
 
 // Execute applies a parsed template to the specified data object,
@@ -203,29 +205,30 @@ func (t *Template) ExecuteTemplate(wr io.Writer, name string, data any) ([]any, 
 //
 // If data is a reflect.Value, the template applies to the concrete
 // value that the reflect.Value holds, as in fmt.Print.
-func (t *Template) Execute(wr io.Writer, data any) ([]any, error) {
-	return t.execute(wr, data)
+func (t *Template) Execute(wr io.Writer, data any, qArgs []any) ([]any, error) {
+	return t.execute(wr, data, qArgs)
 }
 
-func (t *Template) ExecuteBuilder(data any) (string, []any, error) {
+func (t *Template) ExecuteBuilder(data any, qArgs []any) (string, []any, error) {
 	builder := &strings.Builder{}
-	args, err := t.execute(builder, data)
+	args, err := t.execute(builder, data, qArgs)
 	if err != nil {
 		return "", nil, err
 	}
 	return builder.String(), args, nil
 }
 
-func (t *Template) execute(wr io.Writer, data any) (args []any, err error) {
+func (t *Template) execute(wr io.Writer, data any, qArgs []any) (args []any, err error) {
 	defer errRecover(&err)
 	value, ok := data.(reflect.Value)
 	if !ok {
 		value = reflect.ValueOf(data)
 	}
 	state := &state{
-		tmpl: t,
-		wr:   wr,
-		vars: []variable{{"$", value}},
+		tmpl:  t,
+		wr:    wr,
+		vars:  []variable{{"$", value}},
+		qArgs: qArgs,
 	}
 	if t.Tree == nil || t.Root == nil {
 		state.errorf("%q is an incomplete or empty template", t.Name())
@@ -279,9 +282,19 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 			s.printValue(node, val)
 		}
 	case *parse.AtSignNode:
-		// Do not pop variables so they persist until next end.
-		// Also, if the action declares variables, don't print the result.
 		s.evalAtSign(dot, node)
+	case *parse.SqlParamNode:
+		s.wr.Write([]byte("?"))
+		if s.qi < len(s.qArgs) {
+			arg := s.qArgs[s.qi]
+			s.qi++ //索引增加
+			if s.tmpl.sqlParams != nil {
+				arg = s.tmpl.sqlParams(reflect.ValueOf(arg))
+			}
+			s.args = append(s.args, arg)
+		} else {
+			panic(fmt.Errorf("the sql parameter[%d] is missing", s.qi))
+		}
 	case *parse.BreakNode:
 		panic(ErrWalkBreak)
 	case *parse.CommentNode:
@@ -661,17 +674,38 @@ func (s *state) evalFunction(dot reflect.Value, node *parse.IdentifierNode, cmd 
 	return s.evalCall(dot, function, isBuiltin, cmd, name, args, final)
 }
 
-func GetFieldByName(t reflect.Type, fieldName string) (f reflect.StructField, ok bool) {
-	tField, ok := t.FieldByName(fieldName)
-	if ok {
-		return tField, ok
-	}
+func GetFieldByTag(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool) {
 	for i := 0; i < t.NumField(); i++ {
 		tf := t.Field(i)
 		if TagAsFieldName != nil && TagAsFieldName(tf.Tag, fieldName) {
 			return tf, true
 		}
+		if tf.Anonymous && tf.Type.Kind() == reflect.Struct && scanNum != nil {
+			f, ok = GetFieldByTag(tf.Type, fieldName, scanNum)
+			if ok {
+				if _, ok := scanNum[f.Name]; ok {
+					if i <= scanNum[f.Name] {
+						continue
+					} else {
+						scanNum[f.Name] = i
+					}
+				} else {
+					scanNum[f.Name] = i
+				}
+				f.Index = append(tf.Index, f.Index...)
+				return
+			}
+		}
 	}
+	return
+}
+
+func GetFieldByName(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool) {
+	tField, ok := t.FieldByName(fieldName)
+	if ok {
+		return tField, ok
+	}
+	f, ok = GetFieldByTag(t, fieldName, scanNum)
 	return
 }
 
@@ -707,7 +741,7 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 	// It's not a method; must be a field of a struct or an element of a map.
 	switch receiver.Kind() {
 	case reflect.Struct:
-		tField, ok := GetFieldByName(receiver.Type(), fieldName)
+		tField, ok := GetFieldByName(receiver.Type(), fieldName, nil)
 		if ok {
 			field, err := receiver.FieldByIndexErr(tField.Index)
 			if !tField.IsExported() {

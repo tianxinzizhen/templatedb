@@ -259,3 +259,13 @@ func TestInsertPoundSignQuestionMark(t *testing.T) {
 	//同函数orNull
 	fmt.Println(af)
 }
+
+// 查询json
+func TestSelectJsonArrsy(t *testing.T) {
+	db, err := getDB()
+	defer db.Recover(&err)
+	u := templatedb.DBSelect[struct {
+		user *[]int
+	}](db).Select(nil, "SELECT `user` FROM lz_tour_lix.tbl_test_json")
+	fmt.Printf("%#v", u.user)
+}

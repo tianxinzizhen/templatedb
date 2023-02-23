@@ -15,12 +15,6 @@ import (
 	"github.com/tianxinzizhen/templatedb/template"
 )
 
-type sqlDB interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
-}
-
 type actionDB interface {
 	selectScanFunc(ctx context.Context, adb sqlDB, params any, scanFunc any, name []any)
 	exec(ctx context.Context, adb sqlDB, params any, name []any) (lastInsertId, rowsAffected int64)
@@ -37,22 +31,6 @@ type TemplateDB interface {
 	SelectScanFuncContext(ctx context.Context, params any, scanFunc any, name ...any)
 	selectByType(ctx context.Context, params any, t reflect.Type, name ...any) reflect.Value
 }
-
-var RecoverPrintf func(format string, a ...any) (n int, err error)
-
-func recoverPrintf(err error) {
-	if RecoverPrintf != nil && err != nil {
-		var pc []uintptr = make([]uintptr, MaxStackLen)
-		n := runtime.Callers(3, pc[:])
-		frames := runtime.CallersFrames(pc[:n])
-		RecoverPrintf("%s \n", err)
-		for frame, more := frames.Next(); more; frame, more = frames.Next() {
-			RecoverPrintf("%s:%d \n", frame.File, frame.Line)
-		}
-	}
-}
-
-var MaxStackLen = 50
 
 type DefaultDB struct {
 	sqlDB                   *sql.DB
@@ -162,7 +140,7 @@ func (db *DefaultDB) templateBuild(query string, params any) (sql string, args [
 		}
 		db.template[query] = templateSql
 	}
-	return templateSql.ExecuteBuilder(params)
+	return templateSql.ExecuteBuilder(params, nil)
 }
 
 func (db *DefaultDB) selectScanFunc(ctx context.Context, sdb sqlDB, params any, scanFunc any, name []any) {

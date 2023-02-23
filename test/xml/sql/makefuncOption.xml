@@ -1,0 +1,31 @@
+<root pkg="github.com/tianxinzizhen/templatedb/test/xml.OptionMTest">
+    <sql func="Select">
+        select * from tbl_test
+    </sql>
+    <sql func="Exec">
+        INSERT INTO tbl_test1
+        (userId, name, phone, introduction, avatar, image, status)
+        VALUES {range $i,$v:=. } {comma $i}
+        (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+        {end}
+    </sql>
+    <sql func="ExecNoResult" >
+        INSERT INTO tbl_test
+        (userId, name, phone, introduction, avatar, image, status)
+        VALUES {range $i,$v:=. } {comma $i}
+        (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+        {end}
+    </sql>
+    <sql func="ExecNoResultError" >
+        INSERT INTO tbl_test
+        (userId, name, phone, introduction, avatar, image, status)
+        VALUES {range $i,$v:=. } {comma $i}
+        (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+        {end}
+    </sql>
+
+    <sql func="PrepareExec">
+        INSERT INTO tbl_test (userId, name, phone, introduction, avatar, image, status) VALUES
+        (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
+    </sql>
+</root>

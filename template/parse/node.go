@@ -74,6 +74,7 @@ const (
 	NodeBreak                      // A break action.
 	NodeContinue                   // A continue action.
 	NodeAtSign                     //用于sql参数解析
+	NodeSqlParam                   //用于sql参数解析
 )
 
 // Nodes.
@@ -192,7 +193,34 @@ func (t *AtSignNode) tree() *Tree {
 }
 
 func (t *AtSignNode) Copy() Node {
-	return &AtSignNode{tr: t.tr, NodeType: NodeText, Pos: t.Pos, Text: t.Text}
+	return &AtSignNode{tr: t.tr, NodeType: NodeSqlParam, Pos: t.Pos, Text: t.Text}
+}
+
+// AtSignNode holds plain text.
+type SqlParamNode struct {
+	NodeType
+	Pos
+	tr *Tree
+}
+
+func (t *Tree) newSqlParamNode(pos Pos) *SqlParamNode {
+	return &SqlParamNode{tr: t, NodeType: NodeSqlParam, Pos: pos}
+}
+
+func (t *SqlParamNode) String() string {
+	return "?"
+}
+
+func (t *SqlParamNode) writeTo(sb *strings.Builder) {
+	sb.WriteString(t.String())
+}
+
+func (t *SqlParamNode) tree() *Tree {
+	return t.tr
+}
+
+func (t *SqlParamNode) Copy() Node {
+	return &SqlParamNode{tr: t.tr, NodeType: NodeSqlParam, Pos: t.Pos}
 }
 
 // CommentNode holds a comment.
