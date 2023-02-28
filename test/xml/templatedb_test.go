@@ -265,7 +265,7 @@ func TestSelectJsonArrsy(t *testing.T) {
 	db, err := getDB()
 	defer db.Recover(&err)
 	u := templatedb.DBSelect[struct {
-		user *[]int
+		user []*int
 	}](db).Select(nil, "SELECT `user` FROM lz_tour_lix.tbl_test_json")
 	fmt.Printf("%#v", u.user)
 }

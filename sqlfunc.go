@@ -224,6 +224,16 @@ func JsonConvertStruct(field reflect.Value, src any) error {
 		}
 		field = field.Elem()
 	}
+	if field.Kind() == reflect.Slice {
+		if field.IsNil() {
+			field.Set(reflect.MakeSlice(field.Type(), 0, 10))
+		}
+	}
+	if field.Kind() == reflect.Map {
+		if field.IsNil() {
+			field.Set(reflect.MakeMap(field.Type()))
+		}
+	}
 	if field.Kind() == reflect.Struct || field.Kind() == reflect.Slice || field.Kind() == reflect.Map {
 		return json.Unmarshal(src.([]byte), field.Addr().Interface())
 	} else {

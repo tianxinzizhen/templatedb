@@ -36,7 +36,7 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) []any {
 		t = t.Elem()
 	}
 	destSlice := make([]any, 0, len(columns))
-	if t.Kind() == reflect.Struct {
+	if _, ok := sqlParamType[t]; t.Kind() == reflect.Struct && !ok {
 		indexMap := make(map[int][]int, len(columns))
 		scanMapIndex := make(map[string]int)
 		for i, item := range columns {
