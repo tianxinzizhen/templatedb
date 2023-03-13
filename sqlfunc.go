@@ -55,10 +55,6 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 		var args []any = make([]any, 0, list.Len())
 		exists := make(map[any]any)
 		for i := 0; i < list.Len(); i++ {
-			if i > 0 {
-				sb.WriteByte(',')
-			}
-			sb.WriteByte('?')
 			item, isNil := util.Indirect(list.Index(i))
 			if isNil {
 				continue
@@ -104,6 +100,12 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 					args = append(args, val)
 				}
 			}
+		}
+		for i := range args {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteByte('?')
 		}
 		sb.WriteString(")")
 		return sb.String(), args, nil
@@ -251,6 +253,7 @@ func init() {
 	AddTemplateFunc("sqlEscape", sqlEscape)
 	AddTemplateFunc("orNull", orNull)
 	AddTemplateFunc("marshal", marshal)
+	AddTemplateFunc("json", marshal)
 	//模版@#号字符串拼接时对字段值转化成sql字符串函数
 	template.SqlEscape = SqlEscape
 	//使用tag为字段取别名

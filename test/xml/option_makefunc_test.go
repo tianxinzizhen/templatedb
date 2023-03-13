@@ -9,13 +9,15 @@ import (
 	"github.com/tianxinzizhen/templatedb"
 )
 
+type GoodShop struct {
+	Name string
+}
 type OptionMTest struct {
-	templatedb.DBFunc[MTest]
+	templatedb.DBFunc[OptionMTest]
 	Select            func(map[string]any, context.Context) ([]OptionTblTest, error)
 	Exec              func([]GoodShop) (templatedb.Result, error)
 	ExecNoResult      func([]GoodShop)
 	ExecNoResultError func([]GoodShop) error
-	PrepareExec       func([]GoodShop) templatedb.PrepareResult
 }
 
 type OptionTblTest struct {
@@ -30,8 +32,8 @@ func TestOptionMakeSelectFunc(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	dest := &MTest{}
-	_, err = templatedb.OptionDBFuncInit(dest, db)
+	dest := &OptionMTest{}
+	_, err = templatedb.DBFuncInit(dest, db)
 	if err != nil {
 		t.Error(err)
 	}

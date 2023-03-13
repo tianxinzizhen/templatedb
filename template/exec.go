@@ -327,6 +327,7 @@ func (s *state) evalAtSign(dot reflect.Value, node *parse.AtSignNode) {
 	var arg any
 	if s.tmpl.sqlParams != nil {
 		arg = s.tmpl.sqlParams(val)
+		val = reflect.ValueOf(arg)
 	} else {
 		arg = val.Interface()
 	}

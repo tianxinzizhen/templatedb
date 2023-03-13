@@ -1,12 +1,16 @@
 package xml
 
 import (
+	"embed"
 	"fmt"
 	"testing"
 
 	"github.com/tianxinzizhen/templatedb"
 	"github.com/tianxinzizhen/templatedb/test"
 )
+
+//go:embed sql
+var sqlDir embed.FS
 
 func GetOptionDB() (*templatedb.OptionDB, error) {
 	tdb, err := test.GetOptionDB()

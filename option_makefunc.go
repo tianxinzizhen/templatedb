@@ -10,7 +10,7 @@ import (
 	"github.com/tianxinzizhen/templatedb/util"
 )
 
-func OptionDBFuncInit[T any](dbFuncStruct *T, tdb TemplateOptionDB) (*T, error) {
+func DBFuncInit[T any](dbFuncStruct *T, tdb TemplateOptionDB) (*T, error) {
 	dv, isNil := util.Indirect(reflect.ValueOf(dbFuncStruct))
 	if isNil {
 		return nil, errors.New("InitMakeFunc In(0) is nil")
@@ -29,7 +29,7 @@ func OptionDBFuncInit[T any](dbFuncStruct *T, tdb TemplateOptionDB) (*T, error) 
 				return nil, err
 			}
 			nt := new(T)
-			OptionDBFuncInit(nt, tx)
+			DBFuncInit(nt, tx)
 			return nt, nil
 		} else {
 			return nil, fmt.Errorf("Begin error: Currently in a transactional state")
@@ -42,7 +42,7 @@ func OptionDBFuncInit[T any](dbFuncStruct *T, tdb TemplateOptionDB) (*T, error) 
 				return nil, err
 			}
 			nt := new(T)
-			OptionDBFuncInit(nt, tx)
+			DBFuncInit(nt, tx)
 			return nt, nil
 		} else {
 			return nil, fmt.Errorf("BeginTx error: Currently in a transactional state")
@@ -84,13 +84,13 @@ func OptionDBFuncInit[T any](dbFuncStruct *T, tdb TemplateOptionDB) (*T, error) 
 					action = SelectAction
 				}
 			}
-			div.Set(optionMakeDBFunc(dit, tdb, action, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name)))
+			div.Set(makeDBFunc(dit, tdb, action, fmt.Sprintf("%s.%s.%s", dt.PkgPath(), dt.Name(), dist.Name)))
 		}
 	}
 	return dbFuncStruct, nil
 }
 
-func optionMakeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName string) reflect.Value {
+func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName string) reflect.Value {
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
 		op := NewExecOption()
 		var opArgs []any

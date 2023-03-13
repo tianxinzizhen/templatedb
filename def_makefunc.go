@@ -7,10 +7,9 @@ import (
 )
 
 var (
-	contextType       = reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType         = reflect.TypeOf((*error)(nil)).Elem()
-	ResultType        = reflect.TypeOf((*Result)(nil))
-	PrepareResultType = reflect.TypeOf((*PrepareResult)(nil))
+	contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
+	errorType   = reflect.TypeOf((*error)(nil)).Elem()
+	ResultType  = reflect.TypeOf((*Result)(nil))
 )
 
 type Operation int
