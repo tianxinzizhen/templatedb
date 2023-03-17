@@ -1,6 +1,6 @@
 <root pkg="github.com/tianxinzizhen/templatedb/test/xml.OptionMTest">
     <sql func="Select">
-        select * from tbl_test
+        select UserId,Name from tbl_test where Name='ff'
     </sql>
     <sql func="Exec">
         INSERT INTO tbl_test1

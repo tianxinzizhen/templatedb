@@ -139,7 +139,7 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 		}
 		switch action {
 		case ExecAction:
-			lastInsertId, rowsAffected := tdb.Exec(op)
+			lastInsertId, rowsAffected := tdb.TExec(op)
 			result := reflect.ValueOf(&Result{LastInsertId: lastInsertId, RowsAffected: rowsAffected})
 			if t.Out(0).Kind() == reflect.Pointer {
 				results[0] = result
@@ -148,7 +148,7 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 			}
 		case SelectAction:
 			op.SetResult(reflect.Zero(t.Out(0)).Interface())
-			results[0] = reflect.ValueOf(tdb.Query(op))
+			results[0] = reflect.ValueOf(tdb.TQuery(op))
 		case SelectScanAction:
 			tdb.Query(op)
 		case ExecNoResultAction:

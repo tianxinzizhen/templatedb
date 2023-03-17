@@ -107,6 +107,9 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 			}
 			sb.WriteByte('?')
 		}
+		if len(args) == 0 {
+			sb.WriteString("NULL")
+		}
 		sb.WriteString(")")
 		return sb.String(), args, nil
 	} else {

@@ -1,9 +1,0 @@
-<root pkg="github.com/tianxinzizhen/templatedb/test/xml.MTestJson">
-    <sql func="Insert" >
-        INSERT INTO lz_tour_lix.tbl_test_json (jname, `user`) VALUES(@jname, {marshal .user});
-    </sql>
-
-    <sql func="Select" >
-        SELECT Id, jname, `user` FROM lz_tour_lix.tbl_test_json;
-    </sql>
-</root>

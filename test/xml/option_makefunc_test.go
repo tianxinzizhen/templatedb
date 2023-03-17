@@ -14,7 +14,7 @@ type GoodShop struct {
 }
 type OptionMTest struct {
 	templatedb.DBFunc[OptionMTest]
-	Select            func(map[string]any, context.Context) ([]OptionTblTest, error)
+	Select            func(map[string]any, context.Context) ([]*OptionTblTest, error)
 	Exec              func([]GoodShop) (templatedb.Result, error)
 	ExecNoResult      func([]GoodShop)
 	ExecNoResultError func([]GoodShop) error
