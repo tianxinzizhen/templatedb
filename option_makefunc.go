@@ -150,9 +150,9 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 			op.SetResult(reflect.Zero(t.Out(0)).Interface())
 			results[0] = reflect.ValueOf(tdb.TQuery(op))
 		case SelectScanAction:
-			tdb.TQuery(op)
+			tdb.Query(op)
 		case ExecNoResultAction:
-			tdb.TExec(op)
+			tdb.Exec(op)
 		}
 		return results
 	})
