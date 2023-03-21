@@ -80,6 +80,21 @@ func TestOptionSelectArgs(t *testing.T) {
 	}
 }
 
+func TestOptionSelectInt(t *testing.T) {
+	db, err := GetOptionDB()
+	if err != nil {
+		t.Error(err)
+	}
+	i := db.TQuery(&templatedb.ExecOption{
+		Sql:    "select UserId, Name FROM tbl_test ",
+		Result: 0,
+		Args:   []any{1},
+		Param:  Info{Name: "dd"},
+	}).(int)
+	fmt.Println(i)
+
+}
+
 func TestOptionSelectScanFunc(t *testing.T) {
 	db, err := GetOptionDB()
 	if err != nil {

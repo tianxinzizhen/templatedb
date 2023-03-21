@@ -300,12 +300,22 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 			if err != nil {
 				return nil, err
 			}
-			if st.Kind() == reflect.Slice {
-				rv.Set(reflect.Append(rv, row))
+			if rv.CanSet() {
+				if st.Kind() == reflect.Slice {
+					rv.Set(reflect.Append(rv, row))
+				} else {
+					rv.Set(row)
+					break
+				}
 			} else {
-				rv.Set(row)
-				break
+				if st.Kind() == reflect.Slice {
+					rv = reflect.Append(rv, row)
+				} else {
+					rv = row
+					break
+				}
 			}
+
 		}
 		for reflect.PtrTo(rv.Type()) != reflect.PtrTo(reflect.TypeOf(op.Result)) {
 			if rv.CanAddr() {
