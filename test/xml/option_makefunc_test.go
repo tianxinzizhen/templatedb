@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/tianxinzizhen/templatedb"
 )
@@ -18,13 +17,13 @@ type OptionMTest struct {
 	Exec              func([]GoodShop) (templatedb.Result, error)
 	ExecNoResult      func([]GoodShop)
 	ExecNoResultError func([]GoodShop) error
+	SelectFunc        func() func() (UserId, Name string)
 }
 
 type OptionTblTest struct {
-	Id         int
-	UserId     int
-	Name       string
-	created_at time.Time
+	Id     int
+	UserId int
+	Name   string
 }
 
 func TestOptionMakeSelectFunc(t *testing.T) {
@@ -45,4 +44,22 @@ func TestOptionMakeSelectFunc(t *testing.T) {
 	for _, v := range data {
 		fmt.Printf("%#v\n", v)
 	}
+}
+
+func TestOptionMakeSelectFunc2(t *testing.T) {
+	db, err := GetOptionDB()
+	if err != nil {
+		t.Error(err)
+	}
+	dest := &OptionMTest{}
+	_, err = templatedb.DBFuncInit(dest, db)
+	if err != nil {
+		t.Error(err)
+	}
+	defer dest.Recover(&err)
+	data := dest.SelectFunc()
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Print(data == nil)
 }

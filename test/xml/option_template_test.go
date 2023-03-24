@@ -17,7 +17,10 @@ func GetOptionDB() (*templatedb.OptionDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	tdb.LoadSqlOfXml(sqlDir)
+	err = tdb.LoadSqlOfXml(sqlDir)
+	if err != nil {
+		return nil, err
+	}
 	return tdb, nil
 }
 func TestOptionSelectScan(t *testing.T) {

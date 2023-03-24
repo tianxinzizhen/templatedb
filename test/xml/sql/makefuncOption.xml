@@ -28,4 +28,7 @@
         INSERT INTO tbl_test (userId, name, phone, introduction, avatar, image, status) VALUES
         (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
     </sql>
+    <sql func="SelectFunc">
+        select UserId, Name FROM tbl_test where Name='111111'
+    </sql>
 </root>

@@ -253,6 +253,7 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 				}
 
 			}
+			return reflect.Zero(rt).Interface(), nil
 		}
 		return nil, nil
 	} else {

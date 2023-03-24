@@ -671,7 +671,7 @@ func lexAtSign(l *lexer) stateFn {
 Loop:
 	for {
 		switch l.next() {
-		case eof, ',', ';', ')', '\t', '\n', '\f', '\r', ' ':
+		case eof, ',', ';', ')', '\t', '\n', '\f', '\r', ' ', rune(l.leftDelim[0]):
 			l.backup()
 			break Loop
 		}

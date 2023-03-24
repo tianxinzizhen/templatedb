@@ -380,6 +380,8 @@ func IsTrue(val any) (truth, ok bool) {
 	return isTrue(reflect.ValueOf(val))
 }
 
+var invalidTime = time.Time{}
+
 func isTrue(val reflect.Value) (truth, ok bool) {
 	if !val.IsValid() {
 		// Something like var x interface{}, never set. It's a form of nil.
@@ -402,7 +404,7 @@ func isTrue(val reflect.Value) (truth, ok bool) {
 		truth = val.Uint() != 0
 	case reflect.Struct:
 		if tv, ok := val.Interface().(time.Time); ok {
-			if tv == (time.Time{}) {
+			if tv == invalidTime || tv == invalidTime.Local() {
 				truth = false
 			} else {
 				truth = true
