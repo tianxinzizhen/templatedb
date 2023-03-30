@@ -29,7 +29,7 @@ type Test struct{
 	if err != nil {
 		return nil, err
 	}
-	templatedb.RecoverPrintf = fmt.Printf  //设置错误接收打印信息
+	templatedb.LogPrintf = fmt.Printf  //设置错误接收打印信息
     tdb := templatedb.NewOptionDB(sqldb)
 ```
 * SELECT LIST
@@ -82,7 +82,8 @@ defer db.Recover(&err) 只需要在代码头部调用一次便可以捕获错误
 	if err != nil {
 		return nil, err
 	}
-    defer tx.AutoCommit(&err) //用于错误接收和事务自动提交 该函数调用后就不用再次调用 defer db.Recover(&err)
+    //用于错误接收和事务自动提交 该函数调用后就不用再次调用 defer db.Recover(&err)
+    defer tx.AutoCommit(&err) 
 ```
 
 # 安全相关

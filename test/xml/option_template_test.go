@@ -21,6 +21,7 @@ func GetOptionDB() (*templatedb.OptionDB, error) {
 	if err != nil {
 		return nil, err
 	}
+	tdb.SqlInfoPrint(true)
 	return tdb, nil
 }
 func TestOptionSelectScan(t *testing.T) {
@@ -139,13 +140,14 @@ func TestOptionSelectXml(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	ret := []Info{}
 	//查询多条时使用的行来判断不同的sql语句
-	ret := db.TQuery(&templatedb.ExecOption{
+	db.TQuery(&templatedb.ExecOption{
 		FuncPC: templatedb.FuncPC(TestOptionSelectXml),
-		Result: []Info{},
+		Result: &ret,
 		Args:   []any{1},
 		Param:  Info{Name: "dd"},
-	}).([]Info)
+	})
 	// for _, v := range ret {
 	// 	fmt.Println(v)
 	// }

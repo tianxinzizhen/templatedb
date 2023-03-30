@@ -279,16 +279,16 @@ func AddSqlParamType(t reflect.Type) {
 	sqlParamType[t] = struct{}{}
 }
 
-var RecoverPrintf func(format string, a ...any) (n int, err error)
+var LogPrintf func(format string, a ...any) (n int, err error)
 
 func recoverPrintf(err error) {
-	if RecoverPrintf != nil && err != nil {
+	if LogPrintf != nil && err != nil {
 		var pc []uintptr = make([]uintptr, MaxStackLen)
 		n := runtime.Callers(3, pc[:])
 		frames := runtime.CallersFrames(pc[:n])
-		RecoverPrintf("%s \n", err)
+		LogPrintf("%s \n", err)
 		for frame, more := frames.Next(); more; frame, more = frames.Next() {
-			RecoverPrintf("%s:%d \n", frame.File, frame.Line)
+			LogPrintf("%s:%d \n", frame.File, frame.Line)
 		}
 	}
 }

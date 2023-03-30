@@ -13,6 +13,6 @@ func GetOptionDB() (*templatedb.OptionDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	templatedb.RecoverPrintf = fmt.Printf
+	templatedb.LogPrintf = fmt.Printf
 	return templatedb.NewOptionDB(sqldb), nil
 }

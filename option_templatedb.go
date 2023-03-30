@@ -90,6 +90,7 @@ type OptionDB struct {
 	template                map[string]*template.Template
 	delimsLeft, delimsRight string
 	sqlParamsConvert        func(val reflect.Value) any
+	sqlInfoPrint            bool
 }
 
 type optionActionDB interface {
@@ -115,6 +116,9 @@ func (db *OptionDB) Delims(delimsLeft, delimsRight string) {
 
 func (db *OptionDB) SqlParamsConvert(sqlParamsConvert func(val reflect.Value) any) {
 	db.sqlParamsConvert = sqlParamsConvert
+}
+func (db *OptionDB) SqlInfoPrint(sqlInfoPrint bool) {
+	db.sqlInfoPrint = sqlInfoPrint
 }
 
 func NewOptionDB(sqlDB *sql.DB) *OptionDB {
@@ -206,6 +210,11 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if db.sqlInfoPrint && LogPrintf != nil {
+		LogPrintf(sql)
+		LogPrintf("%#v", args)
+		LogPrintf("\n")
+	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()
 	}
@@ -288,6 +297,7 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 			}
 			if !rv.CanSet() {
 				rv = reflect.NewAt(rt, rv.UnsafePointer()).Elem()
+				rv.SetLen(0)
 			}
 			rt = rt.Elem()
 		}
@@ -333,6 +343,11 @@ func (db *OptionDB) exec(sdb sqlDB, op *ExecOption) (lastInsertId, rowsAffected 
 	sql, args, err := db.templateBuild(op.Sql, op.FuncPC, op.FuncName, op.Name, op.Param, op.Args)
 	if err != nil {
 		return 0, 0, err
+	}
+	if db.sqlInfoPrint && LogPrintf != nil {
+		LogPrintf(sql)
+		LogPrintf("%#v", args)
+		LogPrintf("\n")
 	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()
