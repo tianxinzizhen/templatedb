@@ -337,7 +337,7 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 			}
 			return rv.Interface(), nil
 		} else {
-			return nil, nil
+			return op.Result, nil
 		}
 	}
 }
