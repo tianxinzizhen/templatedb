@@ -326,16 +326,19 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 					break
 				}
 			}
-
 		}
-		for reflect.PtrTo(rv.Type()) != reflect.PtrTo(reflect.TypeOf(op.Result)) {
-			if rv.CanAddr() {
-				rv = rv.Addr()
-			} else {
-				break
+		if rv.IsValid() {
+			for reflect.PtrTo(rv.Type()) != reflect.PtrTo(reflect.TypeOf(op.Result)) {
+				if rv.CanAddr() {
+					rv = rv.Addr()
+				} else {
+					break
+				}
 			}
+			return rv.Interface(), nil
+		} else {
+			return nil, nil
 		}
-		return rv.Interface(), nil
 	}
 }
 

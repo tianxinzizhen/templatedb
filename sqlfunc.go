@@ -46,7 +46,7 @@ func comma(iVal reflect.Value) (string, error) {
 func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 	list, isNil := util.Indirect(list)
 	if isNil {
-		return "", nil, fmt.Errorf("inParam sql function in paramter list is nil")
+		return "in(NULL)", nil, nil
 	}
 	fieldName := fmt.Sprint(fieldNames...)
 	if list.Kind() == reflect.Slice || list.Kind() == reflect.Array {
