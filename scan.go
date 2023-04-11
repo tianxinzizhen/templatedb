@@ -37,18 +37,14 @@ func newScanDest(columns []*sql.ColumnType, t reflect.Type) ([]any, error) {
 	}
 	destSlice := make([]any, 0, len(columns))
 	if _, ok := sqlParamType[t]; t.Kind() == reflect.Struct && !ok {
-		indexMap := make(map[int][]int, len(columns))
 		scanMapIndex := make(map[string]int)
-		for i, item := range columns {
+		for _, item := range columns {
 			f, ok := template.GetFieldByName(t, item.Name(), scanMapIndex)
 			if ok {
-				indexMap[i] = f.Index
+				destSlice = append(destSlice, &scanner.StructScanner{Convert: scanConvertByDatabaseType[item.DatabaseTypeName()], Index: f.Index})
 			} else {
-				return nil, fmt.Errorf("类型%v无法扫描字段：%s", t, item.Name())
+				destSlice = append(destSlice, getTempScanDest(item.ScanType()))
 			}
-		}
-		for si, v := range columns {
-			destSlice = append(destSlice, &scanner.StructScanner{Convert: scanConvertByDatabaseType[v.DatabaseTypeName()], Index: indexMap[si]})
 		}
 		return destSlice, nil
 	} else if t.Kind() == reflect.Map {
