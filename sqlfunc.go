@@ -144,6 +144,35 @@ func like(param reflect.Value) (string, []any) {
 	return " like ? ", args
 }
 
+func likeRight(param reflect.Value) (string, []any) {
+	var args []any = make([]any, 1)
+	p := fmt.Sprint(param)
+	lb := strings.Builder{}
+	if !strings.HasPrefix(p, "%") {
+		lb.WriteByte('%')
+	}
+	lb.WriteString(p)
+	if !strings.HasSuffix(p, "%") {
+		lb.WriteByte('%')
+	}
+	args[0] = lb.String()
+	return " like ? ", args
+}
+func likeLeft(param reflect.Value) (string, []any) {
+	var args []any = make([]any, 1)
+	p := fmt.Sprint(param)
+	lb := strings.Builder{}
+	if !strings.HasPrefix(p, "%") {
+		lb.WriteByte('%')
+	}
+	lb.WriteString(p)
+	if !strings.HasSuffix(p, "%") {
+		lb.WriteByte('%')
+	}
+	args[0] = lb.String()
+	return " like ? ", args
+}
+
 func sqlEscape(list ...reflect.Value) (string, error) {
 	sb := strings.Builder{}
 	for i, v := range list {
@@ -252,6 +281,8 @@ func init() {
 	AddTemplateFunc("comma", comma)
 	AddTemplateFunc("in", inParam)
 	AddTemplateFunc("like", like)
+	AddTemplateFunc("liker", likeRight)
+	AddTemplateFunc("likel", likeLeft)
 	AddTemplateFunc("param", params)
 	AddTemplateFunc("sqlEscape", sqlEscape)
 	AddTemplateFunc("orNull", orNull)
