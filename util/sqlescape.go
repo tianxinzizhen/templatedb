@@ -67,7 +67,7 @@ func GetNoneEscapeSql(arg any, sqlEscapeBytesBackslash bool) (sql string, err er
 		if v == nil {
 			buf = append(buf, "NULL"...)
 		} else {
-			buf = append(buf, fmt.Sprintf("'%v'", v)...)
+			buf = append(buf, fmt.Sprintf("%v", v)...)
 		}
 	}
 	return string(buf), nil
