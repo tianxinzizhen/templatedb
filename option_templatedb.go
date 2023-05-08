@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/tianxinzizhen/templatedb/load"
 	commentStruct "github.com/tianxinzizhen/templatedb/load/comment/cstruct"
 	"github.com/tianxinzizhen/templatedb/load/xml"
 	"github.com/tianxinzizhen/templatedb/template"
@@ -159,16 +158,10 @@ func (db *OptionDB) Recover(errp *error) {
 	}
 }
 
-func (db *OptionDB) parse(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error) {
-	templateSql, err := template.New("").Delims(db.delimsLeft, db.delimsRight).SqlParams(db.sqlParamsConvert).Funcs(sqlFunc).Parse(parse)
+func (db *OptionDB) parse(text string) (*template.Template, error) {
+	templateSql, err := template.New("").Delims(db.delimsLeft, db.delimsRight).SqlParams(db.sqlParamsConvert).Funcs(sqlFunc).Parse(text)
 	if err != nil {
 		return nil, err
-	}
-	for _, addParseTree := range addParseTrees {
-		err = addParseTree(templateSql)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return templateSql, nil
 }

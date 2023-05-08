@@ -101,7 +101,7 @@ func newReceiver(t reflect.Type, columns []*sql.ColumnType, scanRows []any) refl
 		ret.Set(reflect.New(t))
 		ret = ret.Elem()
 	}
-	if t.Kind() == reflect.Struct {
+	if _, ok := sqlParamType[t]; t.Kind() == reflect.Struct && !ok {
 		for _, v := range scanRows {
 			if vi, ok := v.(*scanner.StructScanner); ok {
 				vi.Dest = ret

@@ -10,11 +10,9 @@ import (
 	"strings"
 
 	"github.com/tianxinzizhen/templatedb/template"
-
-	"github.com/tianxinzizhen/templatedb/load"
 )
 
-func LoadTemplateStatements(pkg string, sqlDir embed.FS, template map[string]*template.Template, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) error {
+func LoadTemplateStatements(pkg string, sqlDir embed.FS, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
 	files, err := sqlDir.ReadDir(".")
 	if err != nil {
 		return err
@@ -42,7 +40,7 @@ func LoadTemplateStatements(pkg string, sqlDir embed.FS, template map[string]*te
 	return nil
 }
 
-func LoadTemplateStatementsOfBytes(pkg string, bytes []byte, template map[string]*template.Template, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) error {
+func LoadTemplateStatementsOfBytes(pkg string, bytes []byte, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
 	if bytes == nil {
 		return errors.New("sql go bytes is nil")
 	}
@@ -98,6 +96,6 @@ func LoadTemplateStatementsOfBytes(pkg string, bytes []byte, template map[string
 	return nil
 }
 
-func LoadTemplateStatementsOfString(pkg string, sqlComments string, template map[string]*template.Template, parse func(parse string, addParseTrees ...load.AddParseTree) (*template.Template, error)) error {
+func LoadTemplateStatementsOfString(pkg string, sqlComments string, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
 	return LoadTemplateStatementsOfBytes(pkg, []byte(sqlComments), template, parse)
 }
