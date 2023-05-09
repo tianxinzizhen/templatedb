@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -206,18 +207,12 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 	if db.sqlInfoPrint && LogPrintf != nil {
 		sb := strings.Builder{}
 		sb.WriteString(sql)
-		sb.WriteString("Args[")
-		for i, v := range args {
-			if i > 0 {
-				sb.WriteString(",")
-			}
-			if reflect.TypeOf(v).Kind() == reflect.Pointer {
-				sb.WriteString(fmt.Sprint(reflect.ValueOf(v).Elem().Interface()))
-			} else {
-				sb.WriteString(fmt.Sprint(v))
-			}
+		if args != nil {
+			argsJson, _ := json.Marshal(args)
+			sb.WriteString("Args:")
+			sb.WriteString(string(argsJson))
+			sb.WriteString("\n")
 		}
-		sb.WriteString("]\n")
 		LogPrintf(sb.String())
 	}
 	if op.Ctx == nil {
@@ -353,9 +348,15 @@ func (db *OptionDB) exec(sdb sqlDB, op *ExecOption) (lastInsertId, rowsAffected 
 		return 0, 0, err
 	}
 	if db.sqlInfoPrint && LogPrintf != nil {
-		LogPrintf(sql)
-		LogPrintf("%#v", args)
-		LogPrintf("\n")
+		sb := strings.Builder{}
+		sb.WriteString(sql)
+		if args != nil {
+			argsJson, _ := json.Marshal(args)
+			sb.WriteString("Args:")
+			sb.WriteString(string(argsJson))
+			sb.WriteString("\n")
+		}
+		LogPrintf(sb.String())
 	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()
