@@ -43,12 +43,11 @@ func comma(iVal reflect.Value) (string, error) {
 		return "", nil
 	}
 }
-func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
+func inParam(list reflect.Value, fieldNames ...string) (string, []any, error) {
 	list, isNil := util.Indirect(list)
 	if isNil {
 		return "in(NULL)", nil, nil
 	}
-	fieldName := fmt.Sprint(fieldNames...)
 	if list.Kind() == reflect.Slice || list.Kind() == reflect.Array {
 		sb := strings.Builder{}
 		sb.WriteString("in (")
@@ -64,23 +63,36 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 			}
 			switch item.Kind() {
 			case reflect.Struct:
-				tField, ok := template.GetFieldByName(item.Type(), fieldName, nil)
-				if ok {
-					field, err := item.FieldByIndexErr(tField.Index)
-					if err != nil {
-						return "", nil, err
+				sv := item
+				for i := 0; i < len(fieldNames); i++ {
+					fieldName := fieldNames[i]
+					sv, isNil = util.Indirect(sv)
+					if isNil {
+						args = append(args, nil)
+						break
 					}
-					val := field.Interface()
-					if _, ok := exists[val]; !ok {
-						exists[val] = struct{}{}
-						args = append(args, val)
+					tField, ok := template.GetFieldByName(sv.Type(), fieldName, nil)
+					if ok {
+						field, err := sv.FieldByIndexErr(tField.Index)
+						if err != nil {
+							return "", nil, err
+						}
+						if i == len(fieldNames)-1 {
+							val := field.Interface()
+							if _, ok := exists[val]; !ok {
+								exists[val] = struct{}{}
+								args = append(args, val)
+							}
+						} else {
+							sv = field
+						}
+					} else {
+						return "", nil, fmt.Errorf("in params : The attribute %s was not found in the structure %s.%s", fieldName, item.Type().PkgPath(), item.Type().Name())
 					}
-				} else {
-					return "", nil, fmt.Errorf("in params : The attribute %s was not found in the structure %s.%s", fieldName, item.Type().PkgPath(), item.Type().Name())
 				}
 			case reflect.Map:
 				if item.Type().Key().Kind() == reflect.String {
-					fieldValue := item.MapIndex(reflect.ValueOf(fieldName))
+					fieldValue := item.MapIndex(reflect.ValueOf(fmt.Sprint(fieldNames)))
 					if fieldValue.IsValid() {
 						val := fieldValue.Interface()
 						if _, ok := exists[val]; !ok {
@@ -88,7 +100,7 @@ func inParam(list reflect.Value, fieldNames ...any) (string, []any, error) {
 							args = append(args, val)
 						}
 					} else {
-						return "", nil, fmt.Errorf("in params : fieldValue in map[%s] IsValid", fieldName)
+						return "", nil, fmt.Errorf("in params : fieldValue in map[%s] IsValid", fmt.Sprint(fieldNames))
 					}
 				} else {
 					return "", nil, fmt.Errorf("in params : Map key Type is not string")
