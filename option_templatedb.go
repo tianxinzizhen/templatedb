@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"embed"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -205,15 +204,12 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 		return nil, err
 	}
 	if db.sqlInfoPrint && LogPrintf != nil {
-		sb := strings.Builder{}
-		sb.WriteString(sql)
-		if args != nil {
-			argsJson, _ := json.Marshal(args)
-			sb.WriteString("Args:")
-			sb.WriteString(string(argsJson))
-			sb.WriteString("\n")
+		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
+		if err != nil {
+			LogPrintf("sql not print by error[%v]", err)
+		} else {
+			LogPrintf(interpolateParamsSql)
 		}
-		LogPrintf(sb.String())
 	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()
@@ -348,15 +344,12 @@ func (db *OptionDB) exec(sdb sqlDB, op *ExecOption) (lastInsertId, rowsAffected 
 		return 0, 0, err
 	}
 	if db.sqlInfoPrint && LogPrintf != nil {
-		sb := strings.Builder{}
-		sb.WriteString(sql)
-		if args != nil {
-			argsJson, _ := json.Marshal(args)
-			sb.WriteString("Args:")
-			sb.WriteString(string(argsJson))
-			sb.WriteString("\n")
+		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
+		if err != nil {
+			LogPrintf("sql not print by error[%v]", err)
+		} else {
+			LogPrintf(interpolateParamsSql)
 		}
-		LogPrintf(sb.String())
 	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()

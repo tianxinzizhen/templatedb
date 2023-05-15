@@ -1,10 +1,12 @@
 package util
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -262,4 +264,94 @@ func escapeBytesBackslash(buf, v []byte) []byte {
 	}
 
 	return buf[:pos]
+}
+
+func InterpolateParams(query string, args []any, sqlEscapeBytesBackslash bool) (sql string, err error) {
+	// Number of ? should be same to len(args)
+	if strings.Count(query, "?") != len(args) {
+		return "", driver.ErrSkip
+	}
+	buf := make([]byte, 0, len(query))
+	argPos := 0
+	for i := 0; i < len(query); i++ {
+		q := strings.IndexByte(query[i:], '?')
+		if q == -1 {
+			buf = append(buf, query[i:]...)
+			break
+		}
+		buf = append(buf, query[i:i+q]...)
+		i += q
+
+		arg := args[argPos]
+		argPos++
+
+		if arg == nil {
+			buf = append(buf, "NULL"...)
+			continue
+		}
+		switch v := arg.(type) {
+		case int64:
+			buf = strconv.AppendInt(buf, v, 10)
+		case uint64:
+			// Handle uint64 explicitly because our custom ConvertValue emits unsigned values
+			buf = strconv.AppendUint(buf, v, 10)
+		case float64:
+			buf = strconv.AppendFloat(buf, v, 'g', -1, 64)
+		case bool:
+			if v {
+				buf = append(buf, '1')
+			} else {
+				buf = append(buf, '0')
+			}
+		case time.Time:
+			if v.IsZero() {
+				buf = append(buf, "'0000-00-00'"...)
+			} else {
+				buf = append(buf, '\'')
+				buf, err = appendDateTime(buf, v.In(time.Local))
+				if err != nil {
+					return "", err
+				}
+				buf = append(buf, '\'')
+			}
+		case json.RawMessage:
+			buf = append(buf, '\'')
+			if sqlEscapeBytesBackslash {
+				buf = escapeBytesBackslash(buf, v)
+			} else {
+				buf = escapeBytesQuotes(buf, v)
+			}
+			buf = append(buf, '\'')
+		case []byte:
+			if v == nil {
+				buf = append(buf, "NULL"...)
+			} else {
+				buf = append(buf, "_binary'"...)
+				if sqlEscapeBytesBackslash {
+					buf = escapeBytesBackslash(buf, v)
+				} else {
+					buf = escapeBytesQuotes(buf, v)
+				}
+				buf = append(buf, '\'')
+			}
+		case string:
+			buf = append(buf, '\'')
+			if sqlEscapeBytesBackslash {
+				buf = escapeStringBackslash(buf, v)
+			} else {
+				buf = escapeStringQuotes(buf, v)
+			}
+			buf = append(buf, '\'')
+		default:
+			if v == nil {
+				buf = append(buf, "NULL"...)
+			} else {
+				buf = append(buf, fmt.Sprintf("%v", v)...)
+			}
+		}
+	}
+	if argPos != len(args) {
+		return "", driver.ErrSkip
+	}
+	return string(buf), nil
 }

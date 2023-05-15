@@ -242,6 +242,9 @@ func SqlEscape(arg any) (sql string, err error) {
 	return util.GetNoneEscapeSql(arg, SqlEscapeBytesBackslash)
 }
 
+func SqlInterpolateParams(query string, arg []any) (sql string, err error) {
+	return util.InterpolateParams(query, arg, SqlEscapeBytesBackslash)
+}
 func JsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
 	if asName, ok := tag.Lookup("json"); ok {
 		if asName == "-" {
