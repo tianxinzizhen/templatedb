@@ -195,6 +195,14 @@ func (db *OptionDB) templateBuild(opSql string, opFuncPc uintptr, opFuncName str
 		}
 	}
 	sql, args, err := templateSql.ExecuteBuilder(opParams, opArgs)
+	if db.sqlInfoPrint && LogPrintf != nil {
+		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
+		if err != nil {
+			LogPrintf("sql not print by error[%v]", err)
+		} else {
+			LogPrintf("%s:%s", tKey, interpolateParamsSql)
+		}
+	}
 	return sql, args, err
 }
 
@@ -202,14 +210,6 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 	sql, args, err := db.templateBuild(op.Sql, op.FuncPC, op.FuncName, op.Name, op.Param, op.Args)
 	if err != nil {
 		return nil, err
-	}
-	if db.sqlInfoPrint && LogPrintf != nil {
-		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
-		if err != nil {
-			LogPrintf("sql not print by error[%v]", err)
-		} else {
-			LogPrintf(interpolateParamsSql)
-		}
 	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()
@@ -342,14 +342,6 @@ func (db *OptionDB) exec(sdb sqlDB, op *ExecOption) (lastInsertId, rowsAffected 
 	sql, args, err := db.templateBuild(op.Sql, op.FuncPC, op.FuncName, op.Name, op.Param, op.Args)
 	if err != nil {
 		return 0, 0, err
-	}
-	if db.sqlInfoPrint && LogPrintf != nil {
-		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
-		if err != nil {
-			LogPrintf("sql not print by error[%v]", err)
-		} else {
-			LogPrintf(interpolateParamsSql)
-		}
 	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()

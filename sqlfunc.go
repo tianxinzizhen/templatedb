@@ -332,10 +332,12 @@ func recoverPrintf(err error) {
 		var pc []uintptr = make([]uintptr, MaxStackLen)
 		n := runtime.Callers(3, pc[:])
 		frames := runtime.CallersFrames(pc[:n])
-		LogPrintf("%s \n", err)
+		sb := strings.Builder{}
+		sb.WriteString(fmt.Sprintf("%v", err))
 		for frame, more := frames.Next(); more; frame, more = frames.Next() {
-			LogPrintf("%s:%d \n", frame.File, frame.Line)
+			sb.WriteString(fmt.Sprintf("%s:%d \n", frame.File, frame.Line))
 		}
+		LogPrintf(sb.String())
 	}
 }
 
