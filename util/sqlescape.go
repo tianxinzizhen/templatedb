@@ -1,7 +1,6 @@
 package util
 
 import (
-	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -267,10 +266,6 @@ func escapeBytesBackslash(buf, v []byte) []byte {
 }
 
 func InterpolateParams(query string, args []any, sqlEscapeBytesBackslash bool) (sql string, err error) {
-	// Number of ? should be same to len(args)
-	if strings.Count(query, "?") != len(args) {
-		return "", driver.ErrSkip
-	}
 	buf := make([]byte, 0, len(query))
 	argPos := 0
 	for i := 0; i < len(query); i++ {
@@ -349,9 +344,6 @@ func InterpolateParams(query string, args []any, sqlEscapeBytesBackslash bool) (
 				buf = append(buf, fmt.Sprintf("%v", v)...)
 			}
 		}
-	}
-	if argPos != len(args) {
-		return "", driver.ErrSkip
 	}
 	return string(buf), nil
 }

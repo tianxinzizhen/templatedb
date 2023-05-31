@@ -143,7 +143,7 @@ func (db *OptionDB) LoadSqlOfCommentStruct(pkg string, sqlfs embed.FS) error {
 	return commentStruct.LoadTemplateStatements(pkg, sqlfs, db.template, db.parse)
 }
 
-func (db *OptionDB) Recover(errp *error) {
+func (db *OptionDB) Recover(ctx context.Context, errp *error) {
 	if *errp == nil {
 		e := recover()
 		if e != nil {
@@ -154,7 +154,7 @@ func (db *OptionDB) Recover(errp *error) {
 				panic(e)
 			}
 		}
-		recoverPrintf(*errp)
+		recoverPrintf(ctx, *errp)
 	}
 }
 
@@ -166,53 +166,56 @@ func (db *OptionDB) parse(text string) (*template.Template, error) {
 	return templateSql, nil
 }
 
-func (db *OptionDB) templateBuild(opSql string, opFuncPc uintptr, opFuncName string, opName string, opParams any, opArgs []any) (string, []any, error) {
+func (db *OptionDB) templateBuild(op *ExecOption) (string, []any, error) {
 	if db.template == nil {
 		db.template = make(map[string]*template.Template)
 	}
 	var line int
-	if opFuncName == "" {
-		if opFuncPc == 0 {
-			opFuncPc, _, line, _ = runtime.Caller(3)
+	if op.FuncName == "" {
+		if op.FuncPC == 0 {
+			op.FuncPC, _, line, _ = runtime.Caller(3)
 		}
-		opFuncName = runtime.FuncForPC(opFuncPc).Name()
+		op.FuncName = runtime.FuncForPC(op.FuncPC).Name()
 	}
-	tKey := fmt.Sprintf("%s:%s", opFuncName, opName)
+	tKey := fmt.Sprintf("%s:%s", op.FuncName, op.Name)
 	templateSql, templateok := db.template[tKey]
 	if !templateok {
-		tKey = fmt.Sprintf("%s:%d", opFuncName, line)
+		tKey = fmt.Sprintf("%s:%d", op.FuncName, line)
 		templateSql, templateok = db.template[tKey]
 		if !templateok {
-			if len(strings.Trim(opSql, "\t\n\f\r ")) == 0 {
+			if len(strings.Trim(op.Sql, "\t\n\f\r ")) == 0 {
 				return "", nil, fmt.Errorf("template sql string is empy")
 			}
 			var err error
-			templateSql, err = db.parse(opSql)
+			templateSql, err = db.parse(op.Sql)
 			if err != nil {
 				return "", nil, err
 			}
 			db.template[tKey] = templateSql
 		}
 	}
-	sql, args, err := templateSql.ExecuteBuilder(opParams, opArgs)
+	sql, args, err := templateSql.ExecuteBuilder(op.Param, op.Args)
+	if op.Ctx != nil {
+		op.Ctx = context.WithValue(op.Ctx, TemplateDBKeyString, tKey)
+	}
 	if db.sqlInfoPrint && LogPrintf != nil {
 		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
 		if err != nil {
-			LogPrintf("sql not print by error[%v]", err)
+			LogPrintf(op.Ctx, fmt.Sprintf("sql not print by error[%v]", err))
 		} else {
-			LogPrintf("%s:%s", tKey, interpolateParamsSql)
+			LogPrintf(op.Ctx, interpolateParamsSql)
 		}
 	}
 	return sql, args, err
 }
 
 func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
-	sql, args, err := db.templateBuild(op.Sql, op.FuncPC, op.FuncName, op.Name, op.Param, op.Args)
-	if err != nil {
-		return nil, err
-	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()
+	}
+	sql, args, err := db.templateBuild(op)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := sdb.QueryContext(op.Ctx, sql, args...)
 	if err != nil {
@@ -339,12 +342,12 @@ func (db *OptionDB) query(sdb sqlDB, op *ExecOption) (any, error) {
 }
 
 func (db *OptionDB) exec(sdb sqlDB, op *ExecOption) (lastInsertId, rowsAffected int64, err error) {
-	sql, args, err := db.templateBuild(op.Sql, op.FuncPC, op.FuncName, op.Name, op.Param, op.Args)
-	if err != nil {
-		return 0, 0, err
-	}
 	if op.Ctx == nil {
 		op.Ctx = context.Background()
+	}
+	sql, args, err := db.templateBuild(op)
+	if err != nil {
+		return 0, 0, err
 	}
 	result, err := sdb.ExecContext(op.Ctx, sql, args...)
 	if err != nil {
@@ -360,6 +363,7 @@ func (db *OptionDB) exec(sdb sqlDB, op *ExecOption) (lastInsertId, rowsAffected 
 	}
 	return lastid, affected, nil
 }
+
 func (db *OptionDB) Query(op *ExecOption) (any, error) {
 	return db.query(db.sqlDB, op)
 }
@@ -405,7 +409,7 @@ type OptionTxDB struct {
 	tx *sql.Tx
 }
 
-func (tx *OptionTxDB) AutoCommit(errp *error) {
+func (tx *OptionTxDB) AutoCommit(ctx context.Context, errp *error) {
 	if *errp == nil {
 		e := recover()
 		if e != nil {
@@ -415,7 +419,7 @@ func (tx *OptionTxDB) AutoCommit(errp *error) {
 			default:
 				panic(e)
 			}
-			recoverPrintf(*errp)
+			recoverPrintf(ctx, *errp)
 		}
 	}
 	if *errp != nil {

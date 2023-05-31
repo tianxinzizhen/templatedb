@@ -118,6 +118,10 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 		}
 		op.SetArgs(opArgs...)
 		op.SetFuncName(funcName)
+		if op.Ctx == nil {
+			op.Ctx = context.Background()
+		}
+		op.Ctx = context.WithValue(op.Ctx, TemplateDBFuncName, funcName)
 		results = make([]reflect.Value, t.NumOut())
 		if t.NumOut() == 2 || (t.NumOut() == 1 && t.Out(0).Implements(errorType)) {
 			defer func() {
@@ -129,7 +133,7 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 							results[0] = reflect.Zero(t.Out(0))
 						}
 						results[len(results)-1] = reflect.ValueOf(rerr)
-						recoverPrintf(rerr)
+						recoverPrintf(op.Ctx, rerr)
 					default:
 						panic(e)
 					}
