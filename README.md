@@ -8,9 +8,9 @@
 
 # 错误接收
 * 如果要得到templatedb的错误信息需要在代码开头使用  
-defer db.Recover(&err)  $~~~~$//注意：这里是输出错误参数的引用，传入其他错误对象将不能得到引用指针
+defer db.Recover(ctx, &err)  $~~~~$//注意：这里是输出错误参数的引用，传入其他错误对象将不能得到引用指针
 * 事务开启后有通过错误自动提交的方法  
-defer tx.AutoCommit(&err) $~~~~$//注意：同样是输出错误参数的引用
+defer tx.AutoCommit(ctx, &err) $~~~~$//注意：同样是输出错误参数的引用
 
 
 
@@ -35,7 +35,7 @@ type Test struct{
 * SELECT LIST
 ```go
     //接收错误
-    defer db.Recover(&err) 
+    defer db.Recover(ctx, &err) 
 	list:=tdb.TQuery(&templatedb.ExecOption{
 		Sql: "select UserId, Name FROM tbl_test where UserId=? and Name=@Name",
         Args:[]any{1},
@@ -46,7 +46,7 @@ type Test struct{
 * SELECT ONE
 ```go
     //接收错误
-    defer db.Recover(&err) 
+    defer db.Recover(ctx, &err) 
 	t:=tdb.TQuery(&templatedb.ExecOption{
 		Sql: `select UserId, Name FROM tbl_test where UserId=?
         {if .Name}
@@ -61,7 +61,7 @@ type Test struct{
 * SCAN FUNC
 ```go
     //接收错误
-    defer db.Recover(&err) 
+    defer db.Recover(ctx, &err) 
 	tdb.TQuery(&templatedb.ExecOption{
 		Sql: `select UserId, Name FROM tbl_test where UserId=? 
         {if .Name}
@@ -74,7 +74,7 @@ type Test struct{
 		},
 	})
 ```
-defer db.Recover(&err) 只需要在代码头部调用一次便可以捕获错误信息
+defer db.Recover(ctx, &err) 只需要在代码头部调用一次便可以捕获错误信息
 * Begin/BeginTX
 ```go
     //tx, err := tdb.BeginTx(ctx, opts)
@@ -82,8 +82,8 @@ defer db.Recover(&err) 只需要在代码头部调用一次便可以捕获错误
 	if err != nil {
 		return nil, err
 	}
-    //用于错误接收和事务自动提交 该函数调用后就不用再次调用 defer db.Recover(&err)
-    defer tx.AutoCommit(&err) 
+    //用于错误接收和事务自动提交 该函数调用后就不用再次调用 defer db.Recover(ctx, &err)
+    defer tx.AutoCommit(ctx, &err) 
 ```
 
 # 安全相关

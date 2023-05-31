@@ -51,12 +51,12 @@ func DBFuncInit[T any](dbFuncStruct *T, tdb TemplateOptionDB) (*T, error) {
 	if tx, ok := tdb.(*OptionTxDB); ok {
 		dv.FieldByName("AutoCommit").Set(reflect.ValueOf(tx.AutoCommit))
 	} else {
-		dv.FieldByName("AutoCommit").Set(reflect.ValueOf(func(errp *error) {}))
+		dv.FieldByName("AutoCommit").Set(reflect.ValueOf(func(ctx context.Context, errp *error) {}))
 	}
 	if db, ok := tdb.(*OptionDB); ok {
 		dv.FieldByName("Recover").Set(reflect.ValueOf(db.Recover))
 	} else {
-		dv.FieldByName("Recover").Set(reflect.ValueOf(func(errp *error) {}))
+		dv.FieldByName("Recover").Set(reflect.ValueOf(func(ctx context.Context, errp *error) {}))
 	}
 	for i := 0; i < dt.NumField(); i++ {
 		dist := dt.Field(i)

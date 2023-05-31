@@ -25,8 +25,8 @@ const (
 type DBFunc[T any] struct {
 	Begin      func() (*T, error)
 	BeginTx    func(ctx context.Context, opts *sql.TxOptions) (*T, error)
-	AutoCommit func(errp *error)
-	Recover    func(errp *error)
+	AutoCommit func(ctx context.Context, errp *error)
+	Recover    func(ctx context.Context, errp *error)
 }
 
 type Result struct {
