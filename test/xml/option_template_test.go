@@ -12,6 +12,7 @@ import (
 //go:embed sql
 var sqlDir embed.FS
 
+//go:embedsss sql
 func GetOptionDB() (*templatedb.OptionDB, error) {
 	tdb, err := test.GetOptionDB()
 	if err != nil {

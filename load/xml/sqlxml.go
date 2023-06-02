@@ -11,10 +11,10 @@ import (
 )
 
 type Sql struct {
-	Func      string `xml:"func,attr"`
-	Name      string `xml:"name,attr"`
-	Common    bool   `xml:"common,attr"`
-	Statement string `xml:",chardata"`
+	Func       string `xml:"func,attr"`
+	Name       string `xml:"name,attr"`
+	NotPrepare bool   `xml:"notPrepare,attr"`
+	Statement  string `xml:",chardata"`
 }
 
 type SqlStatementRoot struct {
@@ -23,7 +23,7 @@ type SqlStatementRoot struct {
 	Sql     []Sql    `xml:"sql"`
 }
 
-func LoadTemplateStatements(sqlDir embed.FS, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
+func LoadTemplateStatements(pkg string, sqlDir embed.FS, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
 	files, err := sqlDir.ReadDir(".")
 	if err != nil {
 		return err
@@ -42,76 +42,38 @@ func LoadTemplateStatements(sqlDir embed.FS, template map[string]*template.Templ
 			if err != nil {
 				return err
 			}
-			sqlRoot := SqlStatementRoot{}
-			err = xml.Unmarshal(bytes, &sqlRoot)
+			err = LoadTemplateStatementsOfBytes(pkg, bytes, template, parse)
 			if err != nil {
 				return err
-			}
-			commons, err := addCommonTemplate(sqlRoot.Sql, parse)
-			if err != nil {
-				return err
-			}
-			for _, v := range sqlRoot.Sql {
-				if !v.Common {
-					key := fmt.Sprintf("%s.%s:%s", sqlRoot.Pkg, v.Func, v.Name)
-					template[key], err = parse(v.Statement)
-					if err != nil {
-						return err
-					}
-					for _, common := range commons {
-						template[key].AddParseTree(common.Name(), common.Tree)
-					}
-				}
 			}
 		}
 	}
 	return nil
 }
 
-func LoadTemplateStatementsOfBytes(xmlSqls []byte, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
-	if xmlSqls == nil {
+func LoadTemplateStatementsOfBytes(pkg string, bytes []byte, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
+	if bytes == nil {
 		return errors.New("sql xml bytes is nil")
 	}
 	sqlRoot := SqlStatementRoot{}
-	err := xml.Unmarshal([]byte(xmlSqls), &sqlRoot)
+	err := xml.Unmarshal(bytes, &sqlRoot)
 	if err != nil {
 		return err
 	}
-	commons, err := addCommonTemplate(sqlRoot.Sql, parse)
-	if err != nil {
-		return err
+	if strings.TrimSpace(pkg) == "" {
+		pkg = sqlRoot.Pkg
 	}
 	for _, v := range sqlRoot.Sql {
-		if !v.Common {
-			key := fmt.Sprintf("%s.%s:%s", sqlRoot.Pkg, v.Func, v.Name)
-			template[key], err = parse(v.Statement)
-			if err != nil {
-				return err
-			}
-			for _, common := range commons {
-				template[key].AddParseTree(common.Name(), common.Tree)
-			}
+		key := fmt.Sprintf("%s.%s:%s", pkg, v.Func, v.Name)
+		template[key], err = parse(v.Statement)
+		if err != nil {
+			return err
 		}
+		template[key].NotPrepare = v.NotPrepare
 	}
 	return nil
 }
 
-func LoadTemplateStatementsOfString(xmlSqls string, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
-	return LoadTemplateStatementsOfBytes([]byte(xmlSqls), template, parse)
-}
-
-func addCommonTemplate(sqls []Sql, parse func(parse string) (*template.Template, error)) ([]*template.Template, error) {
-	var ret []*template.Template
-	for _, v := range sqls {
-		if v.Common {
-			pt, err := parse(v.Statement)
-			if err != nil {
-				return nil, err
-			}
-			nt := template.New(v.Name)
-			nt.Tree = pt.Tree
-			ret = append(ret, nt)
-		}
-	}
-	return ret, nil
+func LoadTemplateStatementsOfString(pkg, xmlSqls string, template map[string]*template.Template, parse func(parse string) (*template.Template, error)) error {
+	return LoadTemplateStatementsOfBytes(pkg, []byte(xmlSqls), template, parse)
 }

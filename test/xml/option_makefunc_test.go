@@ -36,7 +36,7 @@ func TestOptionMakeSelectFunc(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	defer dest.Recover(&err)
+	// defer dest.Recover(&err)
 	data, err := dest.Select(nil, context.Background())
 	if err != nil {
 		t.Error(err)
@@ -56,7 +56,7 @@ func TestOptionMakeSelectFunc2(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	defer dest.Recover(&err)
+	defer dest.Recover(context.Background(), &err)
 	data := dest.SelectFunc()
 	if err != nil {
 		t.Error(err)

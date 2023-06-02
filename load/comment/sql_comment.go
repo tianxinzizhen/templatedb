@@ -69,23 +69,29 @@ func LoadTemplateStatementsOfBytes(pkg string, bytes []byte, template map[string
 							for _, field := range structType.Fields.List {
 								if field.Doc != nil && len(field.Names) > 0 {
 									key := fmt.Sprintf("%s.%s.%s:", pkg, typeSpec.Name.String(), field.Names[0].String())
-									statement := &strings.Builder{}
+									var sql string
+									var notPrepare bool
 									for _, ci := range field.Doc.List {
+										text := ci.Text
 										if strings.HasPrefix(ci.Text, "//") {
-											statement.WriteString(ci.Text[2:])
+											text = ci.Text[2:]
 										}
 										if strings.HasPrefix(ci.Text, "/*") {
-											statement.WriteString(ci.Text[2 : len(ci.Text)-2])
+											text = ci.Text[2 : len(ci.Text)-2]
+										}
+										if strings.HasPrefix(text, "sql ") {
+											sql = text[len("sql "):]
+										}
+										if strings.HasPrefix(text, "not-prepare ") {
+											notPrepare = true
 										}
 									}
-									if statement.Len() > 0 {
-										template[key], err = parse(statement.String())
-										if err != nil {
-											return err
-										}
+									template[key], err = parse(sql)
+									if err != nil {
+										return err
 									}
+									template[key].NotPrepare = notPrepare
 								}
-
 							}
 						}
 					}

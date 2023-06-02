@@ -266,6 +266,9 @@ func escapeBytesBackslash(buf, v []byte) []byte {
 }
 
 func InterpolateParams(query string, args []any, sqlEscapeBytesBackslash bool) (sql string, err error) {
+	if len(args) == 0 {
+		return query, nil
+	}
 	buf := make([]byte, 0, len(query))
 	argPos := 0
 	for i := 0; i < len(query); i++ {

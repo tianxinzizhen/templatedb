@@ -9,8 +9,6 @@ import (
 	"runtime"
 	"strings"
 
-	commentStruct "github.com/tianxinzizhen/templatedb/load/comment/cstruct"
-	"github.com/tianxinzizhen/templatedb/load/xml"
 	"github.com/tianxinzizhen/templatedb/template"
 )
 
@@ -130,17 +128,7 @@ func NewOptionDB(sqlDB *sql.DB) *OptionDB {
 }
 
 func (db *OptionDB) LoadSqlOfXml(sqlfs embed.FS) error {
-	if db.template == nil {
-		db.template = make(map[string]*template.Template)
-	}
-	return xml.LoadTemplateStatements(sqlfs, db.template, db.parse)
-}
-
-func (db *OptionDB) LoadSqlOfCommentStruct(pkg string, sqlfs embed.FS) error {
-	if db.template == nil {
-		db.template = make(map[string]*template.Template)
-	}
-	return commentStruct.LoadTemplateStatements(pkg, sqlfs, db.template, db.parse)
+	return db.loadXmlFS("", sqlfs)
 }
 
 func (db *OptionDB) Recover(ctx context.Context, errp *error) {
@@ -195,6 +183,16 @@ func (db *OptionDB) templateBuild(op *ExecOption) (string, []any, error) {
 		}
 	}
 	sql, args, err := templateSql.ExecuteBuilder(op.Param, op.Args)
+	if err != nil {
+		return "", nil, err
+	}
+	if templateSql.NotPrepare {
+		sql, err = SqlInterpolateParams(sql, args)
+		if err != nil {
+			return "", nil, err
+		}
+		args = nil
+	}
 	if op.Ctx != nil {
 		op.Ctx = context.WithValue(op.Ctx, TemplateDBKeyString, tKey)
 	}

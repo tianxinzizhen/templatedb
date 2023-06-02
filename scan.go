@@ -114,6 +114,7 @@ func newReceiver(t reflect.Type, columns []*sql.ColumnType, scanRows []any) refl
 				vi.Dest = dest
 			}
 		}
+		ret.Set(dest)
 	} else if t.Kind() == reflect.Slice {
 		dest := reflect.MakeSlice(reflect.SliceOf(t.Elem()), len(columns), len(columns))
 		for _, v := range scanRows {
@@ -121,6 +122,7 @@ func newReceiver(t reflect.Type, columns []*sql.ColumnType, scanRows []any) refl
 				vi.Dest = dest
 			}
 		}
+		ret.Set(dest)
 	} else if t.Kind() == reflect.Func {
 		if t.NumIn() == 0 && t.NumOut() > 0 {
 			var results []reflect.Value = make([]reflect.Value, 0, t.NumOut())
