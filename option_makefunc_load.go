@@ -81,6 +81,8 @@ func DBFuncInitAndLoad[T any](tdb *OptionDB, dbFuncStruct *T, sql any, lt LoadTy
 		tdb.LoadXml(pkg, sql)
 	case LoadComment:
 		tdb.LoadComment(pkg, sql)
+	default:
+		return nil, errors.New("DBFuncInitAndLoad not load sql script data")
 	}
 	for i := 0; i < dt.NumField(); i++ {
 		dist := dt.Field(i)
