@@ -86,7 +86,7 @@ type OptionDB struct {
 	sqlDB                   *sql.DB
 	template                map[string]*template.Template
 	delimsLeft, delimsRight string
-	sqlParamsConvert        func(val reflect.Value) any
+	sqlParamsConvert        func(val reflect.Value) (string, any)
 	sqlInfoPrint            bool
 }
 
@@ -111,7 +111,7 @@ func (db *OptionDB) Delims(delimsLeft, delimsRight string) {
 	db.delimsRight = delimsRight
 }
 
-func (db *OptionDB) SqlParamsConvert(sqlParamsConvert func(val reflect.Value) any) {
+func (db *OptionDB) SqlParamsConvert(sqlParamsConvert func(val reflect.Value) (string, any)) {
 	db.sqlParamsConvert = sqlParamsConvert
 }
 func (db *OptionDB) SqlInfoPrint(sqlInfoPrint bool) {

@@ -36,7 +36,7 @@ type Template struct {
 	NotPrepare bool
 	leftDelim  string
 	rightDelim string
-	sqlParams  func(val reflect.Value) any
+	sqlParams  func(val reflect.Value) (string, any)
 }
 
 // New allocates a new, undefined template with the given name.
@@ -173,7 +173,7 @@ func (t *Template) Delims(left, right string) *Template {
 	return t
 }
 
-func (t *Template) SqlParams(sqlParams func(val reflect.Value) any) *Template {
+func (t *Template) SqlParams(sqlParams func(val reflect.Value) (string, any)) *Template {
 	t.init()
 	t.sqlParams = sqlParams
 	return t

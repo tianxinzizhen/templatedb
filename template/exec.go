@@ -284,12 +284,15 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 	case *parse.AtSignNode:
 		s.evalAtSign(dot, node)
 	case *parse.SqlParamNode:
-		s.wr.Write([]byte("?"))
 		if s.qi < len(s.qArgs) {
 			arg := s.qArgs[s.qi]
 			s.qi++ //索引增加
 			if s.tmpl.sqlParams != nil {
-				arg = s.tmpl.sqlParams(reflect.ValueOf(arg))
+				var ps string
+				ps, arg = s.tmpl.sqlParams(reflect.ValueOf(arg))
+				s.wr.Write([]byte(ps))
+			} else {
+				s.wr.Write([]byte("?"))
 			}
 			s.args = append(s.args, arg)
 		} else {
@@ -325,8 +328,9 @@ func (s *state) evalAtSign(dot reflect.Value, node *parse.AtSignNode) {
 	receiver := s.varValue(node.Vars[len(node.Vars)-1])
 	val := s.evalField(dot, node.Text, node, nil, missingVal, receiver)
 	var arg any
+	var ps = "?"
 	if s.tmpl.sqlParams != nil {
-		arg = s.tmpl.sqlParams(val)
+		ps, arg = s.tmpl.sqlParams(val)
 		val = reflect.ValueOf(arg)
 	} else {
 		arg = val.Interface()
@@ -337,7 +341,6 @@ func (s *state) evalAtSign(dot reflect.Value, node *parse.AtSignNode) {
 			arg = nil
 		}
 	}
-	var ps = "?"
 	if SqlEscape != nil && node.PrefixPoundSign {
 		sqlParam, err := SqlEscape(arg)
 		if err != nil {
