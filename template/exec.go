@@ -903,7 +903,23 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 		s.errorf("error calling %s: %w", name, err)
 	}
 	if params.IsValid() {
-		s.args = append(s.args, params.Interface().([]any)...)
+		ps := strings.Split(v.String(), "?")
+		sb := strings.Builder{}
+		sb.WriteString(ps[0])
+		resultArgs := params.Interface().([]any)
+		for i, v := range resultArgs {
+			if s.tmpl.sqlParams != nil {
+				pitem, arg := s.tmpl.sqlParams(reflect.ValueOf(v))
+				s.args = append(s.args, arg)
+				sb.WriteString(pitem)
+				sb.WriteString(ps[i+1])
+			} else {
+				s.args = append(s.args, v)
+				sb.WriteString("?")
+				sb.WriteString(ps[i+1])
+			}
+		}
+		v = reflect.ValueOf(sb.String())
 	}
 	return unwrap(v)
 }

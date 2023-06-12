@@ -226,7 +226,7 @@ func marshal(list ...reflect.Value) (string, []any, error) {
 			if err != nil {
 				return "", nil, err
 			}
-			args[i] = mJson
+			args[i] = string(mJson)
 		}
 	}
 	return sb.String(), args, nil

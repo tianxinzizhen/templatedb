@@ -48,7 +48,7 @@ func GetNoneEscapeSql(arg any, sqlEscapeBytesBackslash bool) (sql string, err er
 		if v == nil {
 			buf = append(buf, "NULL"...)
 		} else {
-			buf = append(buf, "_binary'"...)
+			buf = append(buf, '\'')
 			if sqlEscapeBytesBackslash {
 				buf = escapeBytesBackslash(buf, v)
 			} else {
