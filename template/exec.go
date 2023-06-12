@@ -904,7 +904,7 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 	}
 	if params.IsValid() {
 		ps := strings.Split(v.String(), "?")
-		sb := strings.Builder{}
+		sb := &strings.Builder{}
 		sb.WriteString(ps[0])
 		resultArgs := params.Interface().([]any)
 		for i, v := range resultArgs {
