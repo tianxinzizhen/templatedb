@@ -78,9 +78,15 @@ func DBFuncInitAndLoad[T any](tdb *OptionDB, dbFuncStruct *T, sql any, lt LoadTy
 	//添加数据信息
 	switch lt {
 	case LoadXML:
-		tdb.LoadXml(pkg, sql)
+		err := tdb.LoadXml(pkg, sql)
+		if err != nil {
+			return nil, err
+		}
 	case LoadComment:
-		tdb.LoadComment(pkg, sql)
+		err := tdb.LoadComment(pkg, sql)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.New("DBFuncInitAndLoad not load sql script data")
 	}
