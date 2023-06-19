@@ -12,16 +12,20 @@ import (
 //go:embed cs.go
 var sqlDir embed.FS
 
-func TestSelect(t *testing.T) {
+func GetDB() (*TestDB, error) {
 	db, err := test.GetOptionDB()
 	if err != nil {
-		t.Error(err)
+		return nil, err
 	}
-	dest := &TestAA{}
+	dest := &TestDB{}
 	_, err = templatedb.DBFuncInitAndLoad(db, dest, sqlDir, templatedb.LoadComment)
 	if err != nil {
-		t.Error(err)
+		return nil, err
 	}
-	ret := dest.Select()
+	return dest, nil
+}
+func TestSelect(t *testing.T) {
+	db, _ := GetDB()
+	ret := db.Select()
 	fmt.Printf("%#v", ret)
 }

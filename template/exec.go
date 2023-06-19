@@ -287,7 +287,7 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 		if s.qi < len(s.qArgs) {
 			arg := s.qArgs[s.qi]
 			s.qi++ //索引增加
-			if s.tmpl.sqlParams != nil {
+			if s.tmpl.sqlParams != nil && arg != nil {
 				var ps string
 				ps, arg = s.tmpl.sqlParams(reflect.ValueOf(arg))
 				s.wr.Write([]byte(ps))
@@ -324,16 +324,26 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 	}
 }
 
-func (s *state) evalAtSign(dot reflect.Value, node *parse.AtSignNode) {
-	receiver := s.varValue(node.Vars[len(node.Vars)-1])
-	val := s.evalField(dot, node.Text, node, nil, missingVal, receiver)
+func (s *state) evalAtSign(val reflect.Value, node *parse.AtSignNode) {
+	fieldNames := strings.Split(node.Text, ".")
+	for _, fieldName := range fieldNames {
+		val = s.evalField(val, fieldName, node, nil, missingVal, val)
+		if val == zero {
+			break
+		}
+	}
 	var arg any
 	var ps = "?"
-	if s.tmpl.sqlParams != nil {
-		ps, arg = s.tmpl.sqlParams(val)
+	if val == zero {
+		arg = nil
 		val = reflect.ValueOf(arg)
 	} else {
-		arg = val.Interface()
+		if s.tmpl.sqlParams != nil {
+			ps, arg = s.tmpl.sqlParams(val)
+			val = reflect.ValueOf(arg)
+		} else {
+			arg = val.Interface()
+		}
 	}
 	if node.SuffixQuestionMark {
 		truth, _ := isTrue(val)
@@ -908,7 +918,7 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 		sb.WriteString(ps[0])
 		resultArgs := params.Interface().([]any)
 		for i, v := range resultArgs {
-			if s.tmpl.sqlParams != nil {
+			if s.tmpl.sqlParams != nil && v != nil {
 				pitem, arg := s.tmpl.sqlParams(reflect.ValueOf(v))
 				s.args = append(s.args, arg)
 				sb.WriteString(pitem)

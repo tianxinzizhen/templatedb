@@ -179,38 +179,6 @@ func likeLeft(param reflect.Value) (string, []any) {
 	return " like ? ", args
 }
 
-func sqlEscape(list ...reflect.Value) (string, error) {
-	sb := strings.Builder{}
-	for i, v := range list {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		param, err := util.GetNoneEscapeSql(v.Interface(), SqlEscapeBytesBackslash)
-		if err != nil {
-			return "", err
-		}
-		sb.WriteString(param)
-	}
-	return sb.String(), nil
-}
-
-func orNull(list ...reflect.Value) (string, []any) {
-	sb := strings.Builder{}
-	var args []any = make([]any, len(list))
-	for i, v := range list {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteByte('?')
-		vi := v.Interface()
-		isTrue, _ := template.IsTrue(vi)
-		if isTrue {
-			args[i] = vi
-		}
-	}
-	return sb.String(), args
-}
-
 func marshal(list ...reflect.Value) (string, []any, error) {
 	sb := strings.Builder{}
 	var args []any = make([]any, len(list))
@@ -293,8 +261,6 @@ func init() {
 	AddTemplateFunc("liker", likeRight)
 	AddTemplateFunc("likel", likeLeft)
 	AddTemplateFunc("param", params)
-	AddTemplateFunc("sqlEscape", sqlEscape)
-	AddTemplateFunc("orNull", orNull)
 	AddTemplateFunc("marshal", marshal)
 	AddTemplateFunc("json", marshal)
 	//模版@#号字符串拼接时对字段值转化成sql字符串函数

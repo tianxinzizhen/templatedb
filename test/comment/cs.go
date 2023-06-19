@@ -4,8 +4,8 @@ import (
 	"github.com/tianxinzizhen/templatedb"
 )
 
-type TestAA struct {
-	templatedb.DBFunc[TestAA]
+type TestDB struct {
+	templatedb.DBFunc[TestDB]
 	//sql select * from tbl_hotel limit 1
 	Select func() map[string]any
 }
