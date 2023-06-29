@@ -48,11 +48,13 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
 		op := NewExecOption()
 		var opArgs []any
-		for _, v := range args {
+		for i, v := range args {
+			val := v.Interface()
+			op.args_Index[i] = val
 			if v.Type().Implements(contextType) {
-				op.SetContext(v.Interface().(context.Context))
+				op.SetContext(val.(context.Context))
 			} else if v.Type().Kind() == reflect.Func {
-				op.SetResult(v.Interface())
+				op.SetResult(val)
 			} else {
 				pvt := v.Type()
 				if pvt.Kind() == reflect.Pointer {
@@ -61,12 +63,12 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 				switch pvt.Kind() {
 				case reflect.Map, reflect.Slice, reflect.Array, reflect.Struct:
 					if _, ok := sqlParamType[pvt]; ok {
-						opArgs = append(opArgs, v.Interface())
+						opArgs = append(opArgs, val)
 					} else {
-						op.SetParam(v.Interface())
+						op.SetParam(val)
 					}
 				default:
-					opArgs = append(opArgs, v.Interface())
+					opArgs = append(opArgs, val)
 				}
 			}
 		}

@@ -86,13 +86,24 @@ func LoadTemplateStatementsOfBytes(pkg string, bytes []byte, template map[string
 											sql = sql[len(":not-prepare"):]
 										}
 									}
+									var paramMap map[string]int
+									if fc, ok := field.Type.(*ast.FuncType); ok {
+										if fc.Params != nil && len(fc.Params.List) > 0 && len(fc.Params.List[0].Names) > 0 {
+											paramMap = make(map[string]int)
+											for i, v := range fc.Params.List {
+												paramMap[v.Names[0].Name] = i
+											}
+										}
+									}
 									if len(sql) > 0 {
 										template[key], err = parse(sql)
 										if err != nil {
 											return err
 										}
 										template[key].NotPrepare = notPrepare
+										template[key].ParamMap = paramMap
 									}
+									//获取参数信息
 								}
 							}
 						}

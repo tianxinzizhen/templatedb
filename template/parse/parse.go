@@ -370,7 +370,7 @@ func (t *Tree) textOrAction() Node {
 	case itemAtSign:
 		return t.newAtSign(token.pos, token.val, t.vars)
 	case itemParam:
-		return t.newSqlParamNode(token.pos)
+		return t.newSqlParamNode(token.pos, token.val)
 	case itemLeftDelim:
 		t.actionLine = token.line
 		defer t.clearActionLine()

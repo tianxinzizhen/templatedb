@@ -15,14 +15,15 @@ import (
 // 这个版本需要进行测试,暂时先搁置比较好
 // 特别是多参数时的可选参数消息
 type ExecOption struct {
-	Ctx      context.Context
-	Sql      string
-	FuncPC   uintptr
-	FuncName string
-	Name     string
-	Param    any
-	Args     []any
-	Result   any
+	Ctx        context.Context
+	Sql        string
+	FuncPC     uintptr
+	FuncName   string
+	Name       string
+	Param      any
+	Args       []any
+	args_Index map[int]any
+	Result     any
 }
 
 func FuncPC(funcP any) uintptr {
@@ -37,7 +38,7 @@ func Args(args ...any) []any {
 }
 
 func NewExecOption() *ExecOption {
-	return &ExecOption{}
+	return &ExecOption{args_Index: map[int]any{}}
 }
 
 func (op *ExecOption) SetContext(ctx context.Context) *ExecOption {
@@ -182,7 +183,8 @@ func (db *OptionDB) templateBuild(op *ExecOption) (string, []any, error) {
 			db.template[tKey] = templateSql
 		}
 	}
-	sql, args, err := templateSql.ExecuteBuilder(op.Param, op.Args)
+
+	sql, args, err := templateSql.ExecuteBuilder(op.Param, op.Args, op.args_Index)
 	if err != nil {
 		return "", nil, err
 	}

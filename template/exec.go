@@ -37,14 +37,15 @@ func initMaxExecDepth() int {
 // template so that multiple executions of the same template
 // can execute in parallel.
 type state struct {
-	tmpl  *Template
-	wr    io.Writer
-	node  parse.Node // current node, for errors
-	vars  []variable // push-down stack of variable values.
-	depth int        // the height of the stack of executing templates.
-	args  []any      // sql参数列表
-	qi    int
-	qArgs []any
+	tmpl     *Template
+	wr       io.Writer
+	node     parse.Node // current node, for errors
+	vars     []variable // push-down stack of variable values.
+	depth    int        // the height of the stack of executing templates.
+	args     []any      // sql参数列表
+	qi       int
+	qArgs    []any
+	pv_index map[int]any
 }
 
 // variable holds the dynamic value of a variable such as $, $x etc.
@@ -206,29 +207,30 @@ func (t *Template) ExecuteTemplate(wr io.Writer, name string, data any) ([]any, 
 // If data is a reflect.Value, the template applies to the concrete
 // value that the reflect.Value holds, as in fmt.Print.
 func (t *Template) Execute(wr io.Writer, data any, qArgs []any) ([]any, error) {
-	return t.execute(wr, data, qArgs)
+	return t.execute(wr, data, qArgs, nil)
 }
 
-func (t *Template) ExecuteBuilder(data any, qArgs []any) (string, []any, error) {
+func (t *Template) ExecuteBuilder(data any, qArgs []any, pv_index map[int]any) (string, []any, error) {
 	builder := &strings.Builder{}
-	args, err := t.execute(builder, data, qArgs)
+	args, err := t.execute(builder, data, qArgs, pv_index)
 	if err != nil {
 		return "", nil, err
 	}
 	return builder.String(), args, nil
 }
 
-func (t *Template) execute(wr io.Writer, data any, qArgs []any) (args []any, err error) {
+func (t *Template) execute(wr io.Writer, data any, qArgs []any, pv_index map[int]any) (args []any, err error) {
 	defer errRecover(&err)
 	value, ok := data.(reflect.Value)
 	if !ok {
 		value = reflect.ValueOf(data)
 	}
 	state := &state{
-		tmpl:  t,
-		wr:    wr,
-		vars:  []variable{{"$", value}},
-		qArgs: qArgs,
+		tmpl:     t,
+		wr:       wr,
+		vars:     []variable{{"$", value}},
+		qArgs:    qArgs,
+		pv_index: pv_index,
 	}
 	if t.Tree == nil || t.Root == nil {
 		state.errorf("%q is an incomplete or empty template", t.Name())
@@ -284,20 +286,7 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 	case *parse.AtSignNode:
 		s.evalAtSign(dot, node)
 	case *parse.SqlParamNode:
-		if s.qi < len(s.qArgs) {
-			arg := s.qArgs[s.qi]
-			s.qi++ //索引增加
-			if s.tmpl.sqlParams != nil && arg != nil {
-				var ps string
-				ps, arg = s.tmpl.sqlParams(reflect.ValueOf(arg))
-				s.wr.Write([]byte(ps))
-			} else {
-				s.wr.Write([]byte("?"))
-			}
-			s.args = append(s.args, arg)
-		} else {
-			panic(fmt.Errorf("the sql parameter[%d] is missing", s.qi))
-		}
+		s.evalParam(dot, node)
 	case *parse.BreakNode:
 		panic(ErrWalkBreak)
 	case *parse.CommentNode:
@@ -321,6 +310,54 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 		s.walkIfOrWith(parse.NodeWith, dot, node.Pipe, node.List, node.ElseList)
 	default:
 		s.errorf("unknown node: %s", node)
+	}
+}
+
+func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
+	var ok bool
+	if len(node.Text) > 0 {
+		val, ok = s.getField(val, node.Text)
+		if !ok && s.tmpl.ParamMap != nil {
+			i, ok := s.tmpl.ParamMap[node.Text]
+			if ok && s.pv_index != nil {
+				if arg, ok := s.pv_index[i]; ok {
+					val = reflect.ValueOf(arg)
+				}
+			}
+		}
+	}
+	if ok {
+		var arg any
+		var ps = "?"
+		if val == zero {
+			arg = nil
+		} else {
+			if s.tmpl.sqlParams != nil {
+				ps, arg = s.tmpl.sqlParams(val)
+			} else {
+				arg = val.Interface()
+			}
+		}
+		s.args = append(s.args, arg)
+		_, err := fmt.Fprint(s.wr, ps)
+		if err != nil {
+			s.writeError(fmt.Errorf("evalAtSign output print:%s", err))
+		}
+	} else {
+		if s.qi < len(s.qArgs) {
+			arg := s.qArgs[s.qi]
+			s.qi++ //索引增加
+			if s.tmpl.sqlParams != nil && arg != nil {
+				var ps string
+				ps, arg = s.tmpl.sqlParams(reflect.ValueOf(arg))
+				s.wr.Write([]byte(ps))
+			} else {
+				s.wr.Write([]byte("?"))
+			}
+			s.args = append(s.args, arg)
+		} else {
+			panic(fmt.Errorf("the sql parameter[%d] is missing", s.qi))
+		}
 	}
 }
 
@@ -809,6 +846,57 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 	}
 	s.errorf("can't evaluate field %s in type %s", fieldName, typ)
 	panic("not reached")
+}
+
+func (s *state) getField(receiver reflect.Value, fieldName string) (val reflect.Value, ok bool) {
+	if !receiver.IsValid() {
+		if s.tmpl.option.missingKey == mapError { // Treat invalid value as missing map key.
+			s.errorf("nil data; no entry for key %q", fieldName)
+		}
+		return zero, false
+	}
+	typ := receiver.Type()
+	receiver, isNil := indirect(receiver)
+	if receiver.Kind() == reflect.Interface && isNil {
+		// Calling a method on a nil interface can't work. The
+		// MethodByName method call below would panic.
+		s.errorf("nil pointer evaluating %s.%s", typ, fieldName)
+		return zero, false
+	}
+
+	// It's not a method; must be a field of a struct or an element of a map.
+	switch receiver.Kind() {
+	case reflect.Struct:
+		tField, ok := GetFieldByName(receiver.Type(), fieldName, nil)
+		if ok {
+			field, err := receiver.FieldByIndexErr(tField.Index)
+			if !tField.IsExported() {
+				s.errorf("%s is an unexported field of struct type %s", fieldName, typ)
+			}
+			if err != nil {
+				s.errorf("%v", err)
+			}
+			return field, true
+		}
+	case reflect.Map:
+		// If it's a map, attempt to use the field name as a key.
+		nameVal := reflect.ValueOf(fieldName)
+		if nameVal.Type().AssignableTo(receiver.Type().Key()) {
+			result := receiver.MapIndex(nameVal)
+			if !result.IsValid() {
+				switch s.tmpl.option.missingKey {
+				case mapInvalid:
+					// Just use the invalid value.
+				case mapZeroValue:
+					result = reflect.Zero(receiver.Type().Elem())
+				case mapError:
+					s.errorf("map has no entry for key %q", fieldName)
+				}
+			}
+			return result, true
+		}
+	}
+	return zero, false
 }
 
 var (

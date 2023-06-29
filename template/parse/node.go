@@ -200,11 +200,12 @@ func (t *AtSignNode) Copy() Node {
 type SqlParamNode struct {
 	NodeType
 	Pos
-	tr *Tree
+	tr   *Tree
+	Text string // The text; may span newlines.
 }
 
-func (t *Tree) newSqlParamNode(pos Pos) *SqlParamNode {
-	return &SqlParamNode{tr: t, NodeType: NodeSqlParam, Pos: pos}
+func (t *Tree) newSqlParamNode(pos Pos, val string) *SqlParamNode {
+	return &SqlParamNode{tr: t, NodeType: NodeSqlParam, Pos: pos, Text: val}
 }
 
 func (t *SqlParamNode) String() string {

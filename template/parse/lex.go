@@ -173,6 +173,32 @@ func (l *lexer) emit(t itemType) {
 	l.startLine = l.line
 }
 
+func (l *lexer) emitp() {
+	start := l.pos
+	end := l.pos
+loop:
+	for i := l.pos - 1; i > 0; i-- {
+		switch l.input[i] {
+		case '<', '>', '=', '!':
+		case '\t', '\n', '\f', '\r', ' ':
+		default:
+			end = i
+			for j := i; ; j-- {
+				switch l.input[j] {
+				case '\t', '\n', '\f', '\r', ' ', ',', l.rightDelim[len(l.rightDelim)-1]:
+					break loop
+				default:
+					start = j
+				}
+			}
+		}
+	}
+	l.pos += Pos(1)
+	l.items <- item{itemParam, l.start, l.input[start : end+1], l.startLine}
+	l.start = l.pos
+	l.startLine = l.line
+}
+
 // ignore skips over the pending input before this point.
 func (l *lexer) ignore() {
 	l.line += strings.Count(l.input[l.start:l.pos], "\n")
@@ -275,9 +301,8 @@ func lexText(l *lexer) stateFn {
 				l.line += strings.Count(l.input[l.start:l.pos], "\n")
 				l.emit(itemText)
 			}
-			l.pos += Pos(1)
 			l.ignore()
-			l.emit(itemParam)
+			l.emitp()
 			return lexText
 		}
 	}
