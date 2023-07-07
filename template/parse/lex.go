@@ -116,21 +116,24 @@ type stateFn func(*lexer) stateFn
 
 // lexer holds the state of the scanner.
 type lexer struct {
-	name        string    // the name of the input; used only for error reports
-	input       string    // the string being scanned
-	leftDelim   string    // start of action
-	rightDelim  string    // end of action
-	emitComment bool      // emit itemComment tokens.
-	pos         Pos       // current position in the input
-	start       Pos       // start position of this item
-	atEOF       bool      // we have hit the end of input and returned eof
-	items       chan item // channel of scanned items
-	parenDepth  int       // nesting depth of ( ) exprs
-	line        int       // 1+number of newlines seen
-	startLine   int       // start line of this item
-	breakOK     bool      // break keyword allowed
-	continueOK  bool      // continue keyword allowed
-	atSign      string
+	name           string    // the name of the input; used only for error reports
+	input          string    // the string being scanned
+	leftDelim      string    // start of action
+	rightDelim     string    // end of action
+	startLeftDelim rune      // start of action rune
+	endRightDelim  rune      // end of action rune
+	emitComment    bool      // emit itemComment tokens.
+	pos            Pos       // current position in the input
+	start          Pos       // start position of this item
+	atEOF          bool      // we have hit the end of input and returned eof
+	items          chan item // channel of scanned items
+	parenDepth     int       // nesting depth of ( ) exprs
+	line           int       // 1+number of newlines seen
+	startLine      int       // start line of this item
+	breakOK        bool      // break keyword allowed
+	continueOK     bool      // continue keyword allowed
+	atSign         string
+	startAtSign    rune // end of action rune
 }
 
 // next returns the next rune in the input.
@@ -177,15 +180,19 @@ func (l *lexer) emitp() {
 	start := l.pos
 	end := l.pos
 loop:
-	for i := l.pos - 1; i > 0; i-- {
-		switch l.input[i] {
+	for i := l.pos - 1; i > 0; {
+		prune, pi := utf8.DecodeLastRuneInString(l.input[:i])
+		i = i - Pos(pi)
+		switch prune {
 		case '<', '>', '=', '!':
 		case '\t', '\n', '\f', '\r', ' ':
 		default:
 			end = i
-			for j := i; ; j-- {
-				switch l.input[j] {
-				case '\t', '\n', '\f', '\r', ' ', ',', l.rightDelim[len(l.rightDelim)-1]:
+			for j := i; j >= 0; {
+				prune, pi := utf8.DecodeLastRuneInString(l.input[:j])
+				j = j - Pos(pi)
+				switch prune {
+				case '\t', '\n', '\f', '\r', ' ', ',', l.endRightDelim:
 					break loop
 				default:
 					start = j
@@ -254,18 +261,24 @@ func lex(name, input, left, right, atSign string, emitComment, breakOK, continue
 	if atSign == "" {
 		atSign = AtSign
 	}
+	startLeftDelim, _ := utf8.DecodeRuneInString(left)
+	endRightDelim, _ := utf8.DecodeLastRuneInString(right)
+	startAtSign, _ := utf8.DecodeRuneInString(atSign)
 	l := &lexer{
-		name:        name,
-		input:       input,
-		leftDelim:   left,
-		rightDelim:  right,
-		atSign:      atSign,
-		emitComment: emitComment,
-		breakOK:     breakOK,
-		continueOK:  continueOK,
-		items:       make(chan item),
-		line:        1,
-		startLine:   1,
+		name:           name,
+		input:          input,
+		leftDelim:      left,
+		rightDelim:     right,
+		startLeftDelim: startLeftDelim,
+		endRightDelim:  endRightDelim,
+		atSign:         atSign,
+		emitComment:    emitComment,
+		breakOK:        breakOK,
+		continueOK:     continueOK,
+		items:          make(chan item),
+		line:           1,
+		startLine:      1,
+		startAtSign:    startAtSign,
 	}
 	go l.run()
 	return l
@@ -291,48 +304,50 @@ const (
 
 // lexText scans until an opening action delimiter, "{{".
 func lexText(l *lexer) stateFn {
-	qx := strings.Index(l.input[l.pos:], "?")
-	atx := strings.Index(l.input[l.pos:], l.atSign)
-	lx := strings.Index(l.input[l.pos:], l.leftDelim)
-	if qx >= 0 {
-		if (qx < atx && (atx < lx || lx == -1)) || (qx < lx && atx == -1) || (atx == -1 && lx == -1) {
-			l.pos += Pos(qx)
-			if qx > 0 && l.pos > l.start {
+	for i := l.pos; int(i) < len(l.input); {
+		prune, pi := utf8.DecodeRuneInString(l.input[i:])
+		switch prune {
+		case '?':
+			l.pos = i
+			if l.pos > l.start {
 				l.line += strings.Count(l.input[l.start:l.pos], "\n")
 				l.emit(itemText)
 			}
-			l.ignore()
 			l.emitp()
 			return lexText
-		}
-	}
-	if atx >= 0 {
-		if atx < lx || lx == -1 {
-			l.pos += Pos(atx)
-			if atx > 0 && l.pos > l.start {
-				l.line += strings.Count(l.input[l.start:l.pos], "\n")
-				l.emit(itemText)
+		case l.startAtSign:
+			end := i + Pos(len(l.atSign))
+			if int(end) <= len(l.input) && l.input[i:end] == l.atSign {
+				l.pos = i
+				if l.pos > l.start {
+					l.line += strings.Count(l.input[l.start:l.pos], "\n")
+					l.emit(itemText)
+				}
+				l.pos += Pos(len(l.atSign))
+				l.ignore()
+				return lexAtSign
 			}
-			l.pos += Pos(len(l.atSign))
-			l.ignore()
-			return lexAtSign
+		case l.startLeftDelim:
+			end := i + Pos(len(l.leftDelim))
+			if int(end) <= len(l.input) && l.input[i:end] == l.leftDelim {
+				l.pos = i
+				ldn := Pos(len(l.leftDelim))
+				trimLength := Pos(0)
+				if hasLeftTrimMarker(l.input[l.pos+ldn:]) {
+					trimLength = rightTrimLength(l.input[l.start:l.pos])
+				}
+				l.pos -= trimLength
+				if l.pos > l.start {
+					l.line += strings.Count(l.input[l.start:l.pos], "\n")
+					l.emit(itemText)
+				}
+				l.pos += trimLength
+				l.ignore()
+				return lexLeftDelim
+			}
+		default:
 		}
-	}
-	if lx >= 0 {
-		ldn := Pos(len(l.leftDelim))
-		l.pos += Pos(lx)
-		trimLength := Pos(0)
-		if hasLeftTrimMarker(l.input[l.pos+ldn:]) {
-			trimLength = rightTrimLength(l.input[l.start:l.pos])
-		}
-		l.pos -= trimLength
-		if l.pos > l.start {
-			l.line += strings.Count(l.input[l.start:l.pos], "\n")
-			l.emit(itemText)
-		}
-		l.pos += trimLength
-		l.ignore()
-		return lexLeftDelim
+		i += Pos(pi)
 	}
 	l.pos = Pos(len(l.input))
 	// Correctly reached EOF.
@@ -696,7 +711,7 @@ func lexAtSign(l *lexer) stateFn {
 Loop:
 	for {
 		switch l.next() {
-		case eof, ',', '%', '\'', ';', ')', '\t', '\n', '\f', '\r', ' ', rune(l.leftDelim[0]),
+		case eof, ',', '%', '\'', ';', ')', '\t', '\n', '\f', '\r', ' ', l.startLeftDelim,
 			'&', '<', '>', '=', '!':
 			l.backup()
 			break Loop
