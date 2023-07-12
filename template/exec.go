@@ -315,13 +315,26 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 
 func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 	var ok bool
-	if len(node.Text) > 0 {
+	if node.Text != "?" {
 		val, ok = s.getField(val, node.Text)
 		if !ok && s.tmpl.ParamMap != nil {
-			i, ok := s.tmpl.ParamMap[node.Text]
-			if ok && s.pv_index != nil {
-				if arg, ok := s.pv_index[i]; ok {
-					val = reflect.ValueOf(arg)
+			var i int
+			if i, ok = s.tmpl.ParamMap[node.Text]; ok {
+				if s.pv_index != nil {
+					var arg any
+					if arg, ok = s.pv_index[i]; ok {
+						val = reflect.ValueOf(arg)
+						if arg != s.qArgs[s.qi] { //param index order
+							for i := s.qi; i < len(s.qArgs); i++ {
+								if s.qArgs[i] == arg {
+									tmp := s.qArgs[s.qi]
+									s.qArgs[s.qi] = arg
+									s.qArgs[i] = tmp
+								}
+							}
+						}
+						s.qi++ //param index next argument
+					}
 				}
 			}
 		}
@@ -341,12 +354,12 @@ func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 		s.args = append(s.args, arg)
 		_, err := fmt.Fprint(s.wr, ps)
 		if err != nil {
-			s.writeError(fmt.Errorf("evalAtSign output print:%s", err))
+			s.writeError(fmt.Errorf("evalParam output print:%s", err))
 		}
 	} else {
 		if s.qi < len(s.qArgs) {
 			arg := s.qArgs[s.qi]
-			s.qi++ //索引增加
+			s.qi++ //param index next argument
 			if s.tmpl.sqlParams != nil && arg != nil {
 				var ps string
 				ps, arg = s.tmpl.sqlParams(reflect.ValueOf(arg))
@@ -850,17 +863,10 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 
 func (s *state) getField(receiver reflect.Value, fieldName string) (val reflect.Value, ok bool) {
 	if !receiver.IsValid() {
-		if s.tmpl.option.missingKey == mapError { // Treat invalid value as missing map key.
-			s.errorf("nil data; no entry for key %q", fieldName)
-		}
 		return zero, false
 	}
-	typ := receiver.Type()
 	receiver, isNil := indirect(receiver)
 	if receiver.Kind() == reflect.Interface && isNil {
-		// Calling a method on a nil interface can't work. The
-		// MethodByName method call below would panic.
-		s.errorf("nil pointer evaluating %s.%s", typ, fieldName)
 		return zero, false
 	}
 
@@ -871,10 +877,10 @@ func (s *state) getField(receiver reflect.Value, fieldName string) (val reflect.
 		if ok {
 			field, err := receiver.FieldByIndexErr(tField.Index)
 			if !tField.IsExported() {
-				s.errorf("%s is an unexported field of struct type %s", fieldName, typ)
+				return zero, false
 			}
 			if err != nil {
-				s.errorf("%v", err)
+				return zero, false
 			}
 			return field, true
 		}
@@ -890,7 +896,7 @@ func (s *state) getField(receiver reflect.Value, fieldName string) (val reflect.
 				case mapZeroValue:
 					result = reflect.Zero(receiver.Type().Elem())
 				case mapError:
-					s.errorf("map has no entry for key %q", fieldName)
+					return zero, false
 				}
 			}
 			return result, true

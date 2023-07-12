@@ -179,14 +179,19 @@ func (l *lexer) emit(t itemType) {
 func (l *lexer) emitp() {
 	start := l.pos
 	end := l.pos
+	isParamNamed := false
 loop:
-	for i := l.pos - 1; i > 0; {
+	for i := l.pos; i > 0; {
 		prune, pi := utf8.DecodeLastRuneInString(l.input[:i])
 		i = i - Pos(pi)
 		switch prune {
 		case '<', '>', '=', '!':
+			isParamNamed = true
 		case '\t', '\n', '\f', '\r', ' ':
 		default:
+			if !isParamNamed {
+				break loop
+			}
 			end = i
 			for j := i; j >= 0; {
 				prune, pi := utf8.DecodeLastRuneInString(l.input[:j])
