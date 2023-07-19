@@ -324,16 +324,6 @@ func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 					var arg any
 					if arg, ok = s.pv_index[i]; ok {
 						val = reflect.ValueOf(arg)
-						if arg != s.qArgs[s.qi] { //param index order
-							for i := s.qi; i < len(s.qArgs); i++ {
-								if s.qArgs[i] == arg {
-									tmp := s.qArgs[s.qi]
-									s.qArgs[s.qi] = arg
-									s.qArgs[i] = tmp
-								}
-							}
-						}
-						s.qi++ //param index next argument
 					}
 				}
 			}
