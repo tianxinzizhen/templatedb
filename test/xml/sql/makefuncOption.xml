@@ -29,6 +29,6 @@
         (@userId, @name, @phone, @introduction, @avatar, @image, @status)  
     </sql>
     <sql func="SelectFunc">
-        select UserId, Name FROM tbl_test where Name='111111'
+        select UserId, Name FROM tbl_test where Name='111'
     </sql>
 </root>

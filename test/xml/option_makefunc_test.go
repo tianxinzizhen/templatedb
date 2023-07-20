@@ -17,7 +17,7 @@ type OptionMTest struct {
 	Exec              func([]GoodShop) (templatedb.Result, error)
 	ExecNoResult      func([]GoodShop)
 	ExecNoResultError func([]GoodShop) error
-	SelectFunc        func() func() (UserId, Name string)
+	SelectFunc        func() (UserId, Name string)
 }
 
 type OptionTblTest struct {
@@ -57,9 +57,9 @@ func TestOptionMakeSelectFunc2(t *testing.T) {
 		t.Error(err)
 	}
 	defer dest.Recover(context.Background(), &err)
-	data := dest.SelectFunc()
+	UserId, Name := dest.SelectFunc()
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Print(data == nil)
+	fmt.Printf("UserId:%s, Name:%s", UserId, Name)
 }

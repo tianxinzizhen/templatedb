@@ -79,15 +79,16 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 		}
 		op.Ctx = context.WithValue(op.Ctx, TemplateDBFuncName, funcName)
 		results = make([]reflect.Value, t.NumOut())
-		if t.NumOut() == 2 || (t.NumOut() == 1 && t.Out(0).Implements(errorType)) {
+		for i := 0; i < t.NumOut(); i++ {
+			results[i] = reflect.Zero(t.Out(i))
+		}
+		hasReturnErr := t.Out(t.NumOut() - 1).Implements(errorType)
+		if hasReturnErr {
 			defer func() {
 				e := recover()
 				if e != nil {
 					switch rerr := e.(type) {
 					case error:
-						if t.NumOut() == 2 {
-							results[0] = reflect.Zero(t.Out(0))
-						}
 						results[len(results)-1] = reflect.ValueOf(rerr)
 						recoverPrintf(op.Ctx, rerr)
 					default:
@@ -95,7 +96,6 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 					}
 				}
 			}()
-			results[len(results)-1] = reflect.Zero(errorType)
 		}
 		switch action {
 		case ExecAction:
@@ -107,8 +107,24 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 				results[0] = result.Elem()
 			}
 		case SelectAction:
-			op.SetResult(reflect.Zero(t.Out(0)).Interface())
-			results[0] = reflect.ValueOf(tdb.TQuery(op))
+			sr := results
+			if hasReturnErr {
+				sr = sr[:len(sr)-1]
+			}
+			if len(sr) == 1 {
+				op.SetResult(sr[0].Interface())
+				sr[0] = reflect.ValueOf(tdb.TQuery(op))
+			} else {
+				out := make([]reflect.Type, 0, len(sr))
+				for _, v := range sr {
+					out = append(out, v.Type())
+				}
+				ft := reflect.FuncOf(nil, out, false)
+				op.SetResult(reflect.Zero(ft).Interface())
+				if fn := reflect.ValueOf(tdb.TQuery(op)); fn.IsValid() && !fn.IsNil() {
+					copy(sr, fn.Call(nil))
+				}
+			}
 		case SelectScanAction:
 			tdb.TQuery(op)
 		case ExecNoResultAction:
