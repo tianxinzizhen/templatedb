@@ -60,11 +60,6 @@ func DBFuncInitCommon[T any](tdb TemplateOptionDB, dbFuncStruct *T) (reflect.Val
 	} else {
 		dv.FieldByName("AutoCommit").Set(reflect.ValueOf(func(ctx context.Context, errp *error) {}))
 	}
-	if db, ok := tdb.(*OptionDB); ok {
-		dv.FieldByName("Recover").Set(reflect.ValueOf(db.Recover))
-	} else {
-		dv.FieldByName("Recover").Set(reflect.ValueOf(func(ctx context.Context, errp *error) {}))
-	}
 	return dv, nil
 }
 
