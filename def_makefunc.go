@@ -79,24 +79,23 @@ func (db DBFunc[T]) BeginTxContext(ctx context.Context, opts *sql.TxOptions) (co
 }
 
 func (db DBFunc[T]) AutoCommitContext(ctx context.Context, errp *error) {
-	d := ctx.Value(&AutoCommitContextKey).(*AutoCommitContextDeep)
-	if d != nil {
+	if *errp == nil {
+		e := recover()
+		if e != nil {
+			switch err := e.(type) {
+			case error:
+				*errp = err
+			default:
+				panic(e)
+			}
+		}
+		recoverPrintf(ctx, *errp)
+	}
+	d, ok := ctx.Value(&AutoCommitContextKey).(*AutoCommitContextDeep)
+	if ok && d != nil {
 		d.Deep--
 		if d.Deep == 0 {
 			db.AutoCommit(ctx, errp)
-		} else {
-			if *errp == nil {
-				e := recover()
-				if e != nil {
-					switch err := e.(type) {
-					case error:
-						*errp = err
-					default:
-						panic(e)
-					}
-				}
-				recoverPrintf(ctx, *errp)
-			}
 		}
 	}
 }
