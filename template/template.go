@@ -68,6 +68,7 @@ func (t *Template) New(name string) *Template {
 		common:     t.common,
 		leftDelim:  t.leftDelim,
 		rightDelim: t.rightDelim,
+		sqlParams:  t.sqlParams,
 	}
 	return nt
 }
