@@ -83,7 +83,7 @@ func (tdb *DBFuncTemplateDB) templateBuild(templateSql *template.Template, op *F
 	}
 	if tdb.sqlDebug && tdb.logFunc != nil {
 		interpolateParamsSql, err := SqlInterpolateParams(op.sql, op.args)
-		ctx := context.WithValue(op.ctx, keyLogSqlFuncName{}, templateSql.Name)
+		ctx := context.WithValue(op.ctx, keyLogSqlFuncName{}, templateSql.Name())
 		if err != nil {
 			tdb.logFunc(ctx, fmt.Sprintf("sql not print by error[%v]", err))
 		} else {
