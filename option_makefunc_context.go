@@ -120,7 +120,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			ret, err = tdb.exec(db, op)
 			if ret != nil {
 				result := reflect.ValueOf(ret)
-				if t.Out(0).Kind() != reflect.Pointer {
+				if t.Out(0).Kind() == reflect.Pointer {
 					results[0] = result
 				} else {
 					results[0] = result.Elem()
