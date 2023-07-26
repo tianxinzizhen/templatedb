@@ -32,47 +32,43 @@ type Result struct {
 	LastInsertId int64
 	RowsAffected int64
 }
-type TXContext struct{}
+type BeginContextKey struct{}
 
-type TXDeepContext struct{}
-
-var BeginContextKey TXContext
-
-var AutoCommitContextKey TXDeepContext
+type AutoCommitContextKey struct{}
 
 type AutoCommitContextDeep struct {
 	Deep int
 }
 
 func (db DBFunc[T]) BeginContext(ctx context.Context) (context.Context, *T, error) {
-	tx, ok := ctx.Value(&BeginContextKey).(*T)
+	tx, ok := ctx.Value(BeginContextKey{}).(*T)
 	if !ok {
 		var err error
 		tx, err = db.Begin()
 		if err != nil {
 			return nil, nil, err
 		}
-		ctx = context.WithValue(ctx, &BeginContextKey, tx)
-		ctx = context.WithValue(ctx, &AutoCommitContextKey, &AutoCommitContextDeep{})
+		ctx = context.WithValue(ctx, BeginContextKey{}, tx)
+		ctx = context.WithValue(ctx, AutoCommitContextKey{}, &AutoCommitContextDeep{})
 	}
-	if d, ok := ctx.Value(&AutoCommitContextKey).(*AutoCommitContextDeep); ok {
+	if d, ok := ctx.Value(AutoCommitContextKey{}).(*AutoCommitContextDeep); ok {
 		d.Deep++
 	}
 	return ctx, tx, nil
 }
 
 func (db DBFunc[T]) BeginTxContext(ctx context.Context, opts *sql.TxOptions) (context.Context, *T, error) {
-	tx, ok := ctx.Value(&BeginContextKey).(*T)
+	tx, ok := ctx.Value(BeginContextKey{}).(*T)
 	if !ok {
 		var err error
 		tx, err = db.BeginTx(ctx, opts)
 		if err != nil {
 			return nil, nil, err
 		}
-		ctx = context.WithValue(ctx, &BeginContextKey, tx)
-		ctx = context.WithValue(ctx, &AutoCommitContextKey, &AutoCommitContextDeep{})
+		ctx = context.WithValue(ctx, BeginContextKey{}, tx)
+		ctx = context.WithValue(ctx, AutoCommitContextKey{}, &AutoCommitContextDeep{})
 	}
-	if d, ok := ctx.Value(&AutoCommitContextKey).(*AutoCommitContextDeep); ok {
+	if d, ok := ctx.Value(AutoCommitContextKey{}).(*AutoCommitContextDeep); ok {
 		d.Deep++
 	}
 	return ctx, tx, nil
@@ -91,7 +87,7 @@ func (db DBFunc[T]) AutoCommitContext(ctx context.Context, errp *error) {
 		}
 		recoverPrintf(ctx, *errp)
 	}
-	d, ok := ctx.Value(&AutoCommitContextKey).(*AutoCommitContextDeep)
+	d, ok := ctx.Value(AutoCommitContextKey{}).(*AutoCommitContextDeep)
 	if ok && d != nil {
 		d.Deep--
 		if d.Deep == 0 {

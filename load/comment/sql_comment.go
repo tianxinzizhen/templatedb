@@ -1,4 +1,4 @@
-package cstruct
+package comment
 
 import (
 	"embed"

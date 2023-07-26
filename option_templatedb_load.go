@@ -4,7 +4,7 @@ import (
 	"embed"
 	"errors"
 
-	commentStruct "github.com/tianxinzizhen/templatedb/load/comment"
+	"github.com/tianxinzizhen/templatedb/load/comment"
 	"github.com/tianxinzizhen/templatedb/load/xml"
 	"github.com/tianxinzizhen/templatedb/template"
 )
@@ -61,17 +61,17 @@ func (db *OptionDB) loadCommentFS(pkg string, sqlfs embed.FS) error {
 	if db.template == nil {
 		db.template = make(map[string]*template.Template)
 	}
-	return commentStruct.LoadTemplateStatements(pkg, sqlfs, db.template, db.parse)
+	return comment.LoadTemplateStatements(pkg, sqlfs, db.template, db.parse)
 }
 func (db *OptionDB) loadCommentString(pkg string, sql string) error {
 	if db.template == nil {
 		db.template = make(map[string]*template.Template)
 	}
-	return commentStruct.LoadTemplateStatementsOfString(pkg, sql, db.template, db.parse)
+	return comment.LoadTemplateStatementsOfString(pkg, sql, db.template, db.parse)
 }
 func (db *OptionDB) loadCommentBytes(pkg string, sqlBytes []byte) error {
 	if db.template == nil {
 		db.template = make(map[string]*template.Template)
 	}
-	return commentStruct.LoadTemplateStatementsOfBytes("", sqlBytes, db.template, db.parse)
+	return comment.LoadTemplateStatementsOfBytes("", sqlBytes, db.template, db.parse)
 }

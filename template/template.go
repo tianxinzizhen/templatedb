@@ -232,6 +232,22 @@ func (t *Template) Parse(text string) (*Template, error) {
 	}
 	return t, nil
 }
+func (t *Template) ParseName(name, text string) (*Template, error) {
+	t.init()
+	t.muFuncs.RLock()
+	trees, err := parse.Parse(name, text, t.leftDelim, t.rightDelim, AtSignString, t.parseFuncs, builtins())
+	t.muFuncs.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	// Add the newly parsed trees, including the one for t, into our common structure.
+	for name, tree := range trees {
+		if _, err := t.AddParseTree(name, tree); err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
+}
 
 // associate installs the new template into the group of templates associated
 // with t. The two are already known to share the common structure.
