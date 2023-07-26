@@ -16,6 +16,7 @@ type DBFuncTemplateDB struct {
 	sqlDebug              bool
 	logFunc               func(ctx context.Context, info string)
 	sqlParamType          map[reflect.Type]struct{}
+	sqlFunc               template.FuncMap
 }
 
 func (tdb *DBFuncTemplateDB) Delims(leftDelim, rightDelim string) {
@@ -38,15 +39,26 @@ func (tdb *DBFuncTemplateDB) LogFunc(logFunc func(ctx context.Context, info stri
 func (tdb *DBFuncTemplateDB) AddSqlParamType(t reflect.Type) {
 	tdb.sqlParamType[t] = struct{}{}
 }
-
+func (tdb *DBFuncTemplateDB) AddTemplateFunc(key string, funcMethod any) error {
+	if _, ok := sqlFunc[key]; ok {
+		return fmt.Errorf("add template func[%s] already exists ", key)
+	} else {
+		tdb.sqlFunc[key] = funcMethod
+	}
+	return nil
+}
 func NewDBFuncTemplateDB(sqlDB *sql.DB) *DBFuncTemplateDB {
 	tdb := &DBFuncTemplateDB{
 		db:        sqlDB,
 		leftDelim: "{", rightDelim: "}",
 		sqlParamType: make(map[reflect.Type]struct{}),
+		sqlFunc:      make(template.FuncMap),
 	}
 	for k, v := range sqlParamType {
 		tdb.sqlParamType[k] = v
+	}
+	for k, v := range sqlFunc {
+		tdb.sqlFunc[k] = v
 	}
 	tdb.logFunc = LogPrintf
 	return tdb

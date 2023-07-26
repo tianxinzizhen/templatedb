@@ -108,7 +108,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		if err != nil {
 			recoverLog(op.ctx, tdb.logFunc, err)
 			if hasReturnErr {
-				results[t.NumOut()-1].Set(reflect.ValueOf(err))
+				results[t.NumOut()-1] = reflect.ValueOf(err)
 			} else {
 				panic(err)
 			}
@@ -138,7 +138,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		if err != nil {
 			recoverLog(op.ctx, tdb.logFunc, err)
 			if hasReturnErr {
-				results[t.NumOut()-1].Set(reflect.ValueOf(err))
+				results[t.NumOut()-1] = reflect.ValueOf(err)
 			} else {
 				panic(err)
 			}
@@ -156,7 +156,7 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, sql any) error {
 		return errors.New("DBFuncContextInit in(dbFuncStruct) is not valid")
 	}
 	dt := dv.Type()
-	tp := template.New(dt.Name()).Delims(tdb.leftDelim, tdb.rightDelim).SqlParams(tdb.sqlParamsConvert).Funcs(sqlFunc)
+	tp := template.New(dt.Name()).Delims(tdb.leftDelim, tdb.rightDelim).SqlParams(tdb.sqlParamsConvert).Funcs(tdb.sqlFunc)
 	sqlInfos, err := load.LoadComment(sql)
 	if err != nil {
 		return err

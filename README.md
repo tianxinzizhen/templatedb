@@ -1,21 +1,8 @@
-# 简介
-使用sql模版和参数动态生成sql,并且参数化执行,可以用模版提供更复杂的sql操作
-
-# 注意
-* 默认使用参数解析符号是：@ 同时支持使用模版函数{param .args} 进行参数化提取
-* 默认使用结构字段别名tag是：json
-更改字段别名函数: template.TagAsFieldName = JsonTagAsFieldName
-
-# 错误接收
-* 如果要得到templatedb的错误信息需要在代码开头使用  
-defer db.Recover(ctx, &err)  $~~~~$//注意：这里是输出错误参数的引用，传入其他错误对象将不能得到引用指针
-* 事务开启后有通过错误自动提交的方法  
-defer tx.AutoCommit(ctx, &err) $~~~~$//注意：同样是输出错误参数的引用
+# Introduction
+SQL is dynamically generated using SQL templates and parameters, which can provide more complex SQL operations with templates
 
 
-
-# 如何使用
-模版执行时可以使用模版函数{param ...}来设置sql参数,并新增@符号的参数提取符,可以使用@Name提取参数信息
+# How to use
 * Table Info
 ```go
 type Test struct{
