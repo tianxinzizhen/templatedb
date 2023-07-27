@@ -24,30 +24,8 @@ func FromSqlTx(ctx context.Context) (tx *sql.Tx, ok bool) {
 	return
 }
 
-func AutoCommitFromContext(ctx context.Context, errp *error) {
-	if *errp == nil {
-		e := recover()
-		if e != nil {
-			switch err := e.(type) {
-			case error:
-				*errp = err
-			default:
-				panic(e)
-			}
-		}
-	}
-	tx, ok := FromSqlTx(ctx)
-	if ok && tx != nil {
-		if *errp != nil {
-			tx.Rollback()
-		} else {
-			tx.Commit()
-		}
-	}
-}
-
-func recoverLog(ctx context.Context, LogPrintf func(ctx context.Context, info string), err error) {
-	if LogPrintf != nil && err != nil {
+func recoverLog(err error) *DBFuncPanicError {
+	if err != nil {
 		var pc []uintptr = make([]uintptr, MaxStackLen)
 		n := runtime.Callers(3, pc[:])
 		frames := runtime.CallersFrames(pc[:n])
@@ -56,9 +34,25 @@ func recoverLog(ctx context.Context, LogPrintf func(ctx context.Context, info st
 		for frame, more := frames.Next(); more; frame, more = frames.Next() {
 			sb.WriteString(fmt.Sprintf("%s:%d \n", frame.File, frame.Line))
 		}
-		LogPrintf(ctx, sb.String())
+		msg := sb.String()
+		return &DBFuncPanicError{msg: msg, err: err}
 	}
+	return nil
 }
+
+type DBFuncPanicError struct {
+	msg string
+	err error
+}
+
+func (e *DBFuncPanicError) Error() string {
+	return e.msg
+}
+
+func (e *DBFuncPanicError) Unwrap() error {
+	return e.err
+}
+
 func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template) reflect.Value {
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
 		op := &FuncExecOption{
@@ -106,11 +100,10 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		var err error
 		err = tdb.templateBuild(templateSql, op)
 		if err != nil {
-			recoverLog(op.ctx, tdb.logFunc, err)
 			if hasReturnErr {
 				results[t.NumOut()-1] = reflect.ValueOf(err)
 			} else {
-				panic(err)
+				panic(recoverLog(err))
 			}
 			return results
 		}
@@ -136,11 +129,10 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			_, err = tdb.exec(db, op)
 		}
 		if err != nil {
-			recoverLog(op.ctx, tdb.logFunc, err)
 			if hasReturnErr {
 				results[t.NumOut()-1] = reflect.ValueOf(err)
 			} else {
-				panic(err)
+				panic(recoverLog(err))
 			}
 		}
 		return results
