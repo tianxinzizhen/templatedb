@@ -3,6 +3,7 @@ package load
 import (
 	"embed"
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -10,6 +11,7 @@ import (
 )
 
 type SqlDataInfo struct {
+	FuncName   string
 	Name       string
 	Sql        string
 	NotPrepare bool
@@ -17,19 +19,19 @@ type SqlDataInfo struct {
 	ParamMap   map[string]int
 }
 
-func LoadComment(sql any) ([]*SqlDataInfo, error) {
+func LoadComment(pkg string, sql any) ([]*SqlDataInfo, error) {
 	switch v := sql.(type) {
 	case embed.FS:
-		return LoadCommentEmbedFS(v)
+		return LoadCommentEmbedFS(pkg, v)
 	case string:
-		return LoadCommentString(v)
+		return LoadCommentString(pkg, v)
 	case []byte:
-		return LoadCommentBytes(v)
+		return LoadCommentBytes(pkg, v)
 	default:
 		return nil, errors.New("comment sql type load data not support")
 	}
 }
-func LoadCommentEmbedFS(sqlDir embed.FS) ([]*SqlDataInfo, error) {
+func LoadCommentEmbedFS(pkg string, sqlDir embed.FS) ([]*SqlDataInfo, error) {
 	files, err := sqlDir.ReadDir(".")
 	if err != nil {
 		return nil, err
@@ -49,7 +51,7 @@ func LoadCommentEmbedFS(sqlDir embed.FS) ([]*SqlDataInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			infos, err := LoadCommentBytes(bytes)
+			infos, err := LoadCommentBytes(pkg, bytes)
 			if err != nil {
 				return nil, err
 			}
@@ -59,7 +61,7 @@ func LoadCommentEmbedFS(sqlDir embed.FS) ([]*SqlDataInfo, error) {
 	return sqlDataInfos, nil
 }
 
-func LoadCommentBytes(bytes []byte) ([]*SqlDataInfo, error) {
+func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 	if bytes == nil {
 		return nil, errors.New("sql go bytes is nil")
 	}
@@ -78,7 +80,8 @@ func LoadCommentBytes(bytes []byte) ([]*SqlDataInfo, error) {
 							for _, field := range structType.Fields.List {
 								if fc, ok := field.Type.(*ast.FuncType); ok {
 									sqlDataInfo := &SqlDataInfo{
-										Name: field.Names[0].String(),
+										Name:     field.Names[0].String(),
+										FuncName: fmt.Sprintf("%s.%s.%s:", pkg, typeSpec.Name.String(), field.Names[0].String()),
 									}
 									for _, ci := range field.Doc.List {
 										if strings.HasPrefix(ci.Text, "//sql") {
@@ -117,6 +120,6 @@ func LoadCommentBytes(bytes []byte) ([]*SqlDataInfo, error) {
 	return sqlDataInfos, nil
 }
 
-func LoadCommentString(sqlComments string) ([]*SqlDataInfo, error) {
-	return LoadCommentBytes([]byte(sqlComments))
+func LoadCommentString(pkg string, sqlComments string) ([]*SqlDataInfo, error) {
+	return LoadCommentBytes(pkg, []byte(sqlComments))
 }

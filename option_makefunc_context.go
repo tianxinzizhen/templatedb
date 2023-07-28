@@ -30,7 +30,7 @@ func recoverLog(err error) *DBFuncPanicError {
 		n := runtime.Callers(3, pc[:])
 		frames := runtime.CallersFrames(pc[:n])
 		sb := strings.Builder{}
-		sb.WriteString(fmt.Sprintf("%v", err))
+		sb.WriteString(fmt.Sprintf("%v \n", err))
 		for frame, more := frames.Next(); more; frame, more = frames.Next() {
 			sb.WriteString(fmt.Sprintf("%s:%d \n", frame.File, frame.Line))
 		}
@@ -53,7 +53,23 @@ func (e *DBFuncPanicError) Unwrap() error {
 	return e.err
 }
 
-func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template) reflect.Value {
+type DBFuncError struct {
+	funcName string
+	err      error
+}
+
+func (e *DBFuncError) Error() string {
+	if e.err != nil {
+		return fmt.Sprintf("FuncName:%s An error has occurred [%s]", e.funcName, e.err.Error())
+	}
+	return e.funcName
+}
+
+func (e *DBFuncError) Unwrap() error {
+	return e.err
+}
+
+func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template, sqlInfo *load.SqlDataInfo) reflect.Value {
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
 		op := &FuncExecOption{
 			args_Index: map[int]any{},
@@ -101,7 +117,10 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		err = tdb.templateBuild(templateSql, op)
 		if err != nil {
 			if hasReturnErr {
-				results[t.NumOut()-1] = reflect.ValueOf(err)
+				results[t.NumOut()-1] = reflect.ValueOf(&DBFuncError{
+					funcName: sqlInfo.FuncName,
+					err:      err,
+				})
 			} else {
 				panic(recoverLog(err))
 			}
@@ -130,7 +149,10 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		}
 		if err != nil {
 			if hasReturnErr {
-				results[t.NumOut()-1] = reflect.ValueOf(err)
+				results[t.NumOut()-1] = reflect.ValueOf(&DBFuncError{
+					funcName: sqlInfo.FuncName,
+					err:      err,
+				})
 			} else {
 				panic(recoverLog(err))
 			}
@@ -149,7 +171,7 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, sql any) error {
 	}
 	dt := dv.Type()
 	tp := template.New(dt.Name()).Delims(tdb.leftDelim, tdb.rightDelim).SqlParams(tdb.sqlParamsConvert).Funcs(tdb.sqlFunc)
-	sqlInfos, err := load.LoadComment(sql)
+	sqlInfos, err := load.LoadComment(dt.PkgPath(), sql)
 	if err != nil {
 		return err
 	}
@@ -206,7 +228,7 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, sql any) error {
 						action = SelectAction
 					}
 				}
-				fcv.Set(makeDBFuncContext(fct, tdb, action, t))
+				fcv.Set(makeDBFuncContext(fct, tdb, action, t, sqlInfo))
 			}
 		}
 	}
