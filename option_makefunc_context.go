@@ -39,6 +39,19 @@ func recoverLog(err error) *DBFuncPanicError {
 	}
 	return nil
 }
+func funcErr(funcName string, err error) *DBFuncError {
+	if err != nil {
+		var pc []uintptr = make([]uintptr, 2)
+		n := runtime.Callers(3, pc)
+		frames := runtime.CallersFrames(pc[:n])
+		var msg string
+		for frame, more := frames.Next(); more; frame, more = frames.Next() {
+			msg = fmt.Sprintf("%s:%d", frame.File, frame.Line)
+		}
+		return &DBFuncError{funcName: funcName, funcFileLine: msg, err: err}
+	}
+	return nil
+}
 
 type DBFuncPanicError struct {
 	msg string
@@ -54,13 +67,14 @@ func (e *DBFuncPanicError) Unwrap() error {
 }
 
 type DBFuncError struct {
-	funcName string
-	err      error
+	funcName     string
+	funcFileLine string
+	err          error
 }
 
 func (e *DBFuncError) Error() string {
 	if e.err != nil {
-		return fmt.Sprintf("FuncName:%s An error has occurred [%s]", e.funcName, e.err.Error())
+		return fmt.Sprintf("%s FuncName:%s An error has occurred [%s]", e.funcFileLine, e.funcName, e.err.Error())
 	}
 	return e.funcName
 }
@@ -117,10 +131,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		err = tdb.templateBuild(templateSql, op)
 		if err != nil {
 			if hasReturnErr {
-				results[t.NumOut()-1] = reflect.ValueOf(&DBFuncError{
-					funcName: sqlInfo.FuncName,
-					err:      err,
-				})
+				results[t.NumOut()-1] = reflect.ValueOf(funcErr(sqlInfo.FuncName, err))
 			} else {
 				panic(recoverLog(err))
 			}
@@ -149,10 +160,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		}
 		if err != nil {
 			if hasReturnErr {
-				results[t.NumOut()-1] = reflect.ValueOf(&DBFuncError{
-					funcName: sqlInfo.FuncName,
-					err:      err,
-				})
+				results[t.NumOut()-1] = reflect.ValueOf(funcErr(sqlInfo.FuncName, err))
 			} else {
 				panic(recoverLog(err))
 			}
