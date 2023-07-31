@@ -78,10 +78,20 @@ func inParam(list reflect.Value, fieldNames ...string) (string, []any, error) {
 							return "", nil, err
 						}
 						if i == len(fieldNames)-1 {
-							val := field.Interface()
-							if _, ok := exists[val]; !ok {
-								exists[val] = struct{}{}
-								args = append(args, val)
+							if field.Kind() == reflect.Slice || field.Kind() == reflect.Array {
+								for i := 0; i < field.Len(); i++ {
+									val := field.Index(i).Interface()
+									if _, ok := exists[val]; !ok {
+										exists[val] = struct{}{}
+										args = append(args, val)
+									}
+								}
+							} else {
+								val := field.Interface()
+								if _, ok := exists[val]; !ok {
+									exists[val] = struct{}{}
+									args = append(args, val)
+								}
 							}
 						} else {
 							sv = field
