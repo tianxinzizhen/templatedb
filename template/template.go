@@ -34,7 +34,7 @@ type Template struct {
 	*parse.Tree
 	*common
 	NotPrepare bool
-	ParamMap   map[string]int
+	ParamMap   map[int]string
 	leftDelim  string
 	rightDelim string
 	sqlParams  func(val reflect.Value) (string, any)

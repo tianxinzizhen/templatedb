@@ -45,7 +45,7 @@ type state struct {
 	args     []any      // sql参数列表
 	qi       int
 	qArgs    []any
-	pv_index map[int]any
+	pv_index map[string]any
 }
 
 // variable holds the dynamic value of a variable such as $, $x etc.
@@ -226,11 +226,18 @@ func (t *Template) execute(wr io.Writer, data any, qArgs []any, pv_index map[int
 		value = reflect.ValueOf(data)
 	}
 	state := &state{
-		tmpl:     t,
-		wr:       wr,
-		vars:     []variable{{"$", value}},
-		qArgs:    qArgs,
-		pv_index: pv_index,
+		tmpl:  t,
+		wr:    wr,
+		vars:  []variable{{"$", value}},
+		qArgs: qArgs,
+	}
+	if len(t.ParamMap) > 0 {
+		state.pv_index = make(map[string]any)
+		for k, v := range pv_index {
+			if ks, ok := t.ParamMap[k]; ok {
+				state.pv_index[ks] = v
+			}
+		}
 	}
 	if t.Tree == nil || t.Root == nil {
 		state.errorf("%q is an incomplete or empty template", t.Name())
@@ -317,15 +324,10 @@ func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 	var ok bool
 	if node.Text != "?" {
 		val, ok = s.getField(val, node.Text)
-		if !ok && s.tmpl.ParamMap != nil {
-			var i int
-			if i, ok = s.tmpl.ParamMap[node.Text]; ok {
-				if s.pv_index != nil {
-					var arg any
-					if arg, ok = s.pv_index[i]; ok {
-						val = reflect.ValueOf(arg)
-					}
-				}
+		if !ok && s.pv_index != nil {
+			var arg any
+			if arg, ok = s.pv_index[node.Text]; ok {
+				val = reflect.ValueOf(arg)
 			}
 		}
 	}
@@ -365,6 +367,9 @@ func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 }
 
 func (s *state) evalAtSign(val reflect.Value, node *parse.AtSignNode) {
+	if node.Global {
+		val = reflect.ValueOf(s.pv_index)
+	}
 	fieldNames := strings.Split(node.Text, ".")
 	for _, fieldName := range fieldNames {
 		val = s.evalField(val, fieldName, node, nil, missingVal, val)

@@ -163,12 +163,18 @@ type AtSignNode struct {
 	Vars               []string // variables defined at the moment.
 	PrefixPoundSign    bool     // is enable pound sign
 	SuffixQuestionMark bool     // is enable question mark
+	Global             bool     // is enable global
 }
 
 func (t *Tree) newAtSign(pos Pos, text string, vars []string) *AtSignNode {
 	fieldName := text
 	prefixPoundSign := false
 	suffixQuestionMark := false
+	global := false
+	if strings.HasPrefix(fieldName, "@") {
+		fieldName = strings.TrimPrefix(fieldName, "@")
+		global = true
+	}
 	if strings.HasPrefix(fieldName, "#") {
 		fieldName = strings.TrimPrefix(fieldName, "#")
 		prefixPoundSign = true
@@ -177,7 +183,7 @@ func (t *Tree) newAtSign(pos Pos, text string, vars []string) *AtSignNode {
 		fieldName = strings.TrimSuffix(fieldName, "?")
 		suffixQuestionMark = true
 	}
-	return &AtSignNode{tr: t, NodeType: NodeAtSign, Pos: pos, Text: fieldName, Vars: vars, PrefixPoundSign: prefixPoundSign, SuffixQuestionMark: suffixQuestionMark}
+	return &AtSignNode{tr: t, NodeType: NodeAtSign, Pos: pos, Text: fieldName, Vars: vars, PrefixPoundSign: prefixPoundSign, SuffixQuestionMark: suffixQuestionMark, Global: global}
 }
 
 func (t *AtSignNode) String() string {
