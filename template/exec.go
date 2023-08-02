@@ -367,7 +367,7 @@ func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 }
 
 func (s *state) evalAtSign(val reflect.Value, node *parse.AtSignNode) {
-	if node.Global {
+	if node.Global && s.pv_index != nil {
 		val = reflect.ValueOf(s.pv_index)
 	}
 	fieldNames := strings.Split(node.Text, ".")

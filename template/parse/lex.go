@@ -197,7 +197,7 @@ loop:
 				prune, pi := utf8.DecodeLastRuneInString(l.input[:j])
 				j = j - Pos(pi)
 				switch prune {
-				case '\t', '\n', '\f', '\r', ' ', ',', l.endRightDelim:
+				case '\t', '\n', '\f', '\r', ' ', ',', '.', l.endRightDelim:
 					break loop
 				default:
 					start = j
