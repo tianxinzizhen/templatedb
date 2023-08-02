@@ -22,6 +22,13 @@ const (
 	ExecNoResultAction
 )
 
+type LoadType int
+
+const (
+	LoadXML LoadType = iota
+	LoadComment
+)
+
 type DBFunc[T any] struct {
 	Begin      func() (*T, error)
 	BeginTx    func(ctx context.Context, opts *sql.TxOptions) (*T, error)
@@ -32,6 +39,7 @@ type Result struct {
 	LastInsertId int64
 	RowsAffected int64
 }
+
 type BeginContextKey struct{}
 
 type AutoCommitContextKey struct{}

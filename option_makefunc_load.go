@@ -10,13 +10,6 @@ import (
 	"github.com/tianxinzizhen/templatedb/util"
 )
 
-type LoadType int
-
-const (
-	LoadXML LoadType = iota
-	LoadComment
-)
-
 func DBFuncInitCommon[T any](tdb TemplateOptionDB, dbFuncStruct *T) (reflect.Value, error) {
 	dv, isNil := util.Indirect(reflect.ValueOf(dbFuncStruct))
 	if isNil {

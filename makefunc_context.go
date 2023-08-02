@@ -169,7 +169,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 	})
 }
 
-func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, sql any) error {
+func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql any) error {
 	dv := reflect.ValueOf(dbFuncStruct)
 	for dv.Kind() == reflect.Pointer {
 		dv = dv.Elem()
@@ -179,9 +179,22 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, sql any) error {
 	}
 	dt := dv.Type()
 	tp := template.New(dt.Name()).Delims(tdb.leftDelim, tdb.rightDelim).SqlParams(tdb.sqlParamsConvert).Funcs(tdb.sqlFunc)
-	sqlInfos, err := load.LoadComment(dt.PkgPath(), sql)
-	if err != nil {
-		return err
+	var sqlInfos []*load.SqlDataInfo
+	var err error
+	//添加数据信息
+	switch lt {
+	case LoadXML:
+		sqlInfos, err = load.LoadXml(dt.PkgPath(), sql)
+		if err != nil {
+			return err
+		}
+	case LoadComment:
+		sqlInfos, err = load.LoadComment(dt.PkgPath(), sql)
+		if err != nil {
+			return err
+		}
+	default:
+		return errors.New("DBFuncContextInit not load sql script data")
 	}
 	for _, sqlInfo := range sqlInfos {
 		_, err = tp.ParseName(sqlInfo.Name, sqlInfo.Sql)
