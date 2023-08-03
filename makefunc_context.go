@@ -126,7 +126,10 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		for i := 0; i < t.NumOut(); i++ {
 			results[i] = reflect.Zero(t.Out(i))
 		}
-		hasReturnErr := t.Out(t.NumOut() - 1).Implements(errorType)
+		var hasReturnErr bool
+		if t.NumOut() > 0 {
+			hasReturnErr = t.Out(t.NumOut() - 1).Implements(errorType)
+		}
 		var err error
 		err = tdb.templateBuild(templateSql, op)
 		if err != nil {
