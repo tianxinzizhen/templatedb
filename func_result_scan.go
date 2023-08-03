@@ -71,44 +71,17 @@ func newScanDestByValues(sqlParamType map[reflect.Type]struct{}, columns []*sql.
 	return destSlice, more, arrayLen, nil
 }
 
-func nextScan(ret []reflect.Value, rowi int, scanRows []any) {
+func nextNewScanDest(ret []reflect.Value, scanRows []any) {
 	if len(ret) == 1 {
 		rt := ret[0].Type()
-		var more bool
-		var isArray = rt.Kind() == reflect.Array
 		if rt.Kind() == reflect.Array || rt.Kind() == reflect.Slice {
 			rt = rt.Elem()
-			more = true
 		}
 		rv := reflect.New(rt).Elem()
 		for rv.Kind() == reflect.Pointer {
 			rt = rt.Elem()
 			rv.Set(reflect.New(rt))
 			rv = rv.Elem()
-		}
-		if more {
-			rt := ret[0].Type().Elem()
-			mv := rv
-			for rt.Kind() == reflect.Pointer {
-				rt = rt.Elem()
-				mv = rv.Addr()
-			}
-			if isArray {
-				if ret[0].IsZero() {
-					ret[0] = reflect.New(ret[0].Type()).Elem()
-				}
-				ret[0].Index(rowi).Set(mv)
-			} else {
-				ret[0] = reflect.Append(ret[0], mv)
-			}
-		} else {
-			mv := rv
-			rt := ret[0].Type()
-			for rt.Kind() == reflect.Pointer {
-				rt = rt.Elem()
-				mv = rv.Addr()
-			}
-			ret[0] = mv
 		}
 		if _, ok := sqlParamType[rt]; rt.Kind() == reflect.Struct && !ok {
 			for _, v := range scanRows {
@@ -133,8 +106,7 @@ func nextScan(ret []reflect.Value, rowi int, scanRows []any) {
 		} else {
 			for _, v := range scanRows {
 				if vi, ok := v.(*scanner.ParameterScanner); ok {
-					ret[0] = reflect.New(ret[0].Type()).Elem()
-					vi.Dest = ret[0]
+					vi.Dest = rv
 				}
 			}
 		}
@@ -144,6 +116,60 @@ func nextScan(ret []reflect.Value, rowi int, scanRows []any) {
 				ret[i] = reflect.New(ret[i].Type()).Elem()
 				vi.Dest = ret[i]
 			}
+		}
+	}
+}
+
+func nextSetResult(ret []reflect.Value, rowi int, scanRows []any) {
+	if len(ret) == 1 {
+		rt := ret[0].Type()
+		var more bool
+		var isArray = rt.Kind() == reflect.Array
+		var isSlice = rt.Kind() == reflect.Slice
+		if isArray || isSlice {
+			more = true
+		}
+		var rv reflect.Value
+		for _, v := range scanRows {
+			if vi, ok := v.(*scanner.StructScanner); ok {
+				rv = vi.Dest
+				break
+			}
+			if vi, ok := v.(*scanner.MapScanner); ok {
+				rv = vi.Dest
+				break
+			}
+			if vi, ok := v.(*scanner.SliceScanner); ok {
+				rv = vi.Dest
+				break
+			}
+			if vi, ok := v.(*scanner.ParameterScanner); ok {
+				rv = vi.Dest
+				break
+			}
+		}
+		if more {
+			rt = rt.Elem()
+			mv := rv
+			for rt.Kind() == reflect.Pointer {
+				rt = rt.Elem()
+				mv = rv.Addr()
+			}
+			if isArray {
+				if ret[0].IsZero() {
+					ret[0] = reflect.New(ret[0].Type()).Elem()
+				}
+				ret[0].Index(rowi).Set(mv)
+			} else {
+				ret[0] = reflect.Append(ret[0], mv)
+			}
+		} else {
+			mv := rv
+			for rt.Kind() == reflect.Pointer {
+				rt = rt.Elem()
+				mv = rv.Addr()
+			}
+			ret[0] = mv
 		}
 	}
 }

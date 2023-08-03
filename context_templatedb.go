@@ -124,11 +124,12 @@ func (tdb *DBFuncTemplateDB) query(db sqlDB, op *FuncExecOption) error {
 	}
 	i := 0
 	for rows.Next() {
-		nextScan(op.result, i, dest)
+		nextNewScanDest(op.result, dest)
 		err = rows.Scan(dest...)
 		if err != nil {
 			return err
 		}
+		nextSetResult(op.result, i, dest)
 		if more {
 			i++
 			if arrayLen > 0 && i == arrayLen {
