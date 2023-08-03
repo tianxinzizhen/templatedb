@@ -78,7 +78,7 @@ func LoadXMLBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 	var sqlDataInfos []*SqlDataInfo
 	for _, v := range sqlRoot.Sql {
 		sqlDataInfo := &SqlDataInfo{
-			Name:       v.Name,
+			Name:       v.Func,
 			FuncName:   fmt.Sprintf("%s.%s:%s", pkg, v.Func, v.Name),
 			Sql:        v.Statement,
 			NotPrepare: v.NotPrepare,
