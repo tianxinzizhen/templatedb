@@ -210,7 +210,7 @@ func (t *Template) Execute(wr io.Writer, data any, qArgs []any) ([]any, error) {
 	return t.execute(wr, data, qArgs, nil)
 }
 
-func (t *Template) ExecuteBuilder(data any, qArgs []any, pv_index map[int]any) (string, []any, error) {
+func (t *Template) ExecuteBuilder(data any, qArgs []any, pv_index []any) (string, []any, error) {
 	builder := &strings.Builder{}
 	args, err := t.execute(builder, data, qArgs, pv_index)
 	if err != nil {
@@ -219,7 +219,7 @@ func (t *Template) ExecuteBuilder(data any, qArgs []any, pv_index map[int]any) (
 	return builder.String(), args, nil
 }
 
-func (t *Template) execute(wr io.Writer, data any, qArgs []any, pv_index map[int]any) (args []any, err error) {
+func (t *Template) execute(wr io.Writer, data any, qArgs []any, pv_index []any) (args []any, err error) {
 	defer errRecover(&err)
 	value, ok := data.(reflect.Value)
 	if !ok {
@@ -231,11 +231,11 @@ func (t *Template) execute(wr io.Writer, data any, qArgs []any, pv_index map[int
 		vars:  []variable{{"$", value}},
 		qArgs: qArgs,
 	}
-	if len(t.ParamMap) > 0 {
+	if len(t.Param) > 0 {
 		state.pv_index = make(map[string]any)
-		for k, v := range pv_index {
-			if ks, ok := t.ParamMap[k]; ok {
-				state.pv_index[ks] = v
+		for i, v := range pv_index {
+			if i < len(t.Param) {
+				state.pv_index[t.Param[i]] = v
 			}
 		}
 	}

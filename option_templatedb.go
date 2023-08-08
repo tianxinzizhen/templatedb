@@ -22,7 +22,7 @@ type ExecOption struct {
 	Name       string
 	Param      any
 	Args       []any
-	args_Index map[int]any
+	args_Index []any
 	Result     any
 }
 
@@ -38,7 +38,7 @@ func Args(args ...any) []any {
 }
 
 func NewExecOption() *ExecOption {
-	return &ExecOption{args_Index: map[int]any{}}
+	return &ExecOption{}
 }
 
 func (op *ExecOption) SetContext(ctx context.Context) *ExecOption {

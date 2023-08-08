@@ -148,6 +148,9 @@ func nextSetResult(ret []reflect.Value, rowi int, scanRows []any) {
 				break
 			}
 		}
+		if !rv.IsValid() {
+			return
+		}
 		if more {
 			rt = rt.Elem()
 			mv := rv

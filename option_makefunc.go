@@ -48,9 +48,9 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
 		op := NewExecOption()
 		var opArgs []any
-		for i, v := range args {
+		for _, v := range args {
 			val := v.Interface()
-			op.args_Index[i] = val
+			op.args_Index = append(op.args_Index, val)
 			if v.Type().Implements(contextType) {
 				op.SetContext(val.(context.Context))
 			} else if v.Type().Kind() == reflect.Func {

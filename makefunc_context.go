@@ -85,13 +85,11 @@ func (e *DBFuncError) Unwrap() error {
 
 func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template, sqlInfo *load.SqlDataInfo) reflect.Value {
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
-		op := &FuncExecOption{
-			args_Index: map[int]any{},
-		}
+		op := &FuncExecOption{}
 		var opArgs []any
-		for i, v := range args {
+		for _, v := range args {
 			val := v.Interface()
-			op.args_Index[i] = val
+			op.args_Index = append(op.args_Index, val)
 			if v.Type().Implements(contextType) {
 				op.ctx = val.(context.Context)
 			} else {
@@ -209,7 +207,7 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 		}
 		t := tp.Lookup(sqlInfo.Name)
 		t.NotPrepare = sqlInfo.NotPrepare
-		t.ParamMap = sqlInfo.ParamMap
+		t.Param = sqlInfo.Param
 		if fc, ok := dt.FieldByName(sqlInfo.Name); ok {
 			fct := fc.Type
 			if fct.Kind() == reflect.Func {

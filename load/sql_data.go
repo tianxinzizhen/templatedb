@@ -16,7 +16,7 @@ type SqlDataInfo struct {
 	Sql        string
 	NotPrepare bool
 	Common     bool
-	ParamMap   map[int]string
+	Param      []string
 }
 
 func LoadComment(pkg string, sql any) ([]*SqlDataInfo, error) {
@@ -103,9 +103,10 @@ func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 										}
 									}
 									if fc.Params != nil && len(fc.Params.List) > 0 && len(fc.Params.List[0].Names) > 0 {
-										sqlDataInfo.ParamMap = make(map[int]string)
-										for i, v := range fc.Params.List {
-											sqlDataInfo.ParamMap[i] = v.Names[0].Name
+										for _, v := range fc.Params.List {
+											for _, v := range v.Names {
+												sqlDataInfo.Param = append(sqlDataInfo.Param, v.Name)
+											}
 										}
 									}
 									sqlDataInfos = append(sqlDataInfos, sqlDataInfo)

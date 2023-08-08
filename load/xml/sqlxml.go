@@ -14,6 +14,7 @@ type Sql struct {
 	Func       string `xml:"func,attr"`
 	Name       string `xml:"name,attr"`
 	NotPrepare bool   `xml:"notPrepare,attr"`
+	Param      string `xml:"param,attr"`
 	Statement  string `xml:",chardata"`
 }
 
@@ -70,6 +71,12 @@ func LoadTemplateStatementsOfBytes(pkg string, bytes []byte, template map[string
 			return err
 		}
 		template[key].NotPrepare = v.NotPrepare
+		if len(v.Param) > 0 {
+			for _, v := range strings.Split(v.Param, ",") {
+				pname, _, _ := strings.Cut(v, " ")
+				template[key].Param = append(template[key].Param, strings.TrimSpace(pname))
+			}
+		}
 	}
 	return nil
 }
