@@ -62,8 +62,8 @@ func newScanDestByValues(sqlParamType map[reflect.Type]struct{}, columns []*sql.
 		if len(columns) > 0 {
 			for i := 0; i < len(columns); i++ {
 				destSlice = append(destSlice, &scanner.ParameterScanner{
-					Column:  columns[0],
-					Convert: scanConvertByDatabaseType[columns[0].DatabaseTypeName()],
+					Column:  columns[i],
+					Convert: scanConvertByDatabaseType[columns[i].DatabaseTypeName()],
 				})
 			}
 		}
@@ -113,8 +113,7 @@ func nextNewScanDest(ret []reflect.Value, scanRows []any) {
 	} else {
 		for i, v := range scanRows {
 			if vi, ok := v.(*scanner.ParameterScanner); ok {
-				ret[i] = reflect.New(ret[i].Type()).Elem()
-				vi.Dest = ret[i]
+				vi.Dest = reflect.New(ret[i].Type()).Elem()
 			}
 		}
 	}
@@ -173,6 +172,12 @@ func nextSetResult(ret []reflect.Value, rowi int, scanRows []any) {
 				mv = rv.Addr()
 			}
 			ret[0] = mv
+		}
+	} else {
+		for i, v := range scanRows {
+			if vi, ok := v.(*scanner.ParameterScanner); ok {
+				ret[i] = vi.Dest
+			}
 		}
 	}
 }
