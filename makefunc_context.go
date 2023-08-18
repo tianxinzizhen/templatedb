@@ -91,7 +91,9 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			val := v.Interface()
 			op.args_Index = append(op.args_Index, val)
 			if v.Type().Implements(contextType) {
-				op.ctx = val.(context.Context)
+				if val != nil {
+					op.ctx = val.(context.Context)
+				}
 			} else {
 				pvt := v.Type()
 				if pvt.Kind() == reflect.Pointer {
@@ -134,6 +136,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			if hasReturnErr {
 				results[t.NumOut()-1] = reflect.ValueOf(funcErr(sqlInfo.FuncName, err))
 			} else {
+				tdb.enableRecover(op.ctx)
 				panic(recoverLog(err))
 			}
 			return results
@@ -163,6 +166,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			if hasReturnErr {
 				results[t.NumOut()-1] = reflect.ValueOf(funcErr(sqlInfo.FuncName, err))
 			} else {
+				tdb.enableRecover(op.ctx)
 				panic(recoverLog(err))
 			}
 		}
@@ -255,39 +259,4 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 		}
 	}
 	return nil
-}
-
-func AutoCommit(ctx context.Context, err *error) {
-	tx, ok := FromSqlTx(ctx)
-	if ok && tx != nil {
-		if *err != nil {
-			tx.Rollback()
-			return
-		}
-		if e := recover(); e != nil {
-			tx.Rollback()
-			switch e := e.(type) {
-			case error:
-				*err = e
-			default:
-				panic(e)
-			}
-			return
-		}
-		tx.Commit()
-	}
-}
-
-func Recover(_ context.Context, err *error) {
-	if *err == nil {
-		if e := recover(); e != nil {
-			switch e := e.(type) {
-			case error:
-				*err = e
-			default:
-				panic(e)
-			}
-			return
-		}
-	}
 }

@@ -52,7 +52,9 @@ func makeDBFunc(t reflect.Type, tdb TemplateOptionDB, action Operation, funcName
 			val := v.Interface()
 			op.args_Index = append(op.args_Index, val)
 			if v.Type().Implements(contextType) {
-				op.SetContext(val.(context.Context))
+				if val != nil {
+					op.SetContext(val.(context.Context))
+				}
 			} else if v.Type().Kind() == reflect.Func {
 				op.SetResult(val)
 			} else {

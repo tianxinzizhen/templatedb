@@ -161,11 +161,41 @@ func (tdb *DBFuncTemplateDB) exec(db sqlDB, op *FuncExecOption) (ret *Result, er
 	return &Result{lastInsertId, rowsAffected}, nil
 }
 
+type recoverPanic struct{}
+
+func (tdb *DBFuncTemplateDB) enableRecover(ctx context.Context) {
+	if ctx != nil {
+		recoverPanic, ok := ctx.Value(recoverPanic{}).(*bool)
+		if ok {
+			*recoverPanic = true
+		}
+	}
+}
+
+func (tdb *DBFuncTemplateDB) FromRecover(ctx context.Context) (*bool, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	recoverPanic, ok := ctx.Value(recoverPanic{}).(*bool)
+	return recoverPanic, ok
+}
+
+func (tdb *DBFuncTemplateDB) NewRecover(ctx context.Context) context.Context {
+	if _, ok := tdb.FromRecover(ctx); ok {
+		return ctx
+	}
+	isRecoverPanic := false
+	return context.WithValue(ctx, recoverPanic{}, &isRecoverPanic)
+}
+
 func (tdb *DBFuncTemplateDB) Begin(ctx context.Context) (context.Context, error) {
 	return tdb.BeginTx(ctx, nil)
 }
 
 func (tdb *DBFuncTemplateDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (context.Context, error) {
+	if _, ok := tdb.FromRecover(ctx); !ok {
+		ctx = tdb.NewRecover(ctx)
+	}
 	if tx, ok := FromSqlTx(ctx); ok && tx != nil {
 		return ctx, nil
 	}
@@ -174,4 +204,41 @@ func (tdb *DBFuncTemplateDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (
 		return nil, err
 	}
 	return NewSqlTx(ctx, tx), nil
+}
+func (tdb *DBFuncTemplateDB) AutoCommit(ctx context.Context, err *error) {
+	if rp, ok := tdb.FromRecover(ctx); ok && *rp {
+		if *err == nil {
+			if e := recover(); e != nil {
+				switch e := e.(type) {
+				case error:
+					*err = e
+				default:
+					panic(e)
+				}
+			}
+		}
+	}
+	tx, ok := FromSqlTx(ctx)
+	if ok {
+		if *err != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}
+}
+
+func (tdb *DBFuncTemplateDB) Recover(ctx context.Context, err *error) {
+	if rp, ok := tdb.FromRecover(ctx); ok && *rp {
+		if *err == nil {
+			if e := recover(); e != nil {
+				switch e := e.(type) {
+				case error:
+					*err = e
+				default:
+					panic(e)
+				}
+			}
+		}
+	}
 }
