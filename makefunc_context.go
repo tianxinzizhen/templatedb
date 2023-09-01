@@ -85,7 +85,7 @@ func (e *DBFuncError) Unwrap() error {
 
 func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template, sqlInfo *load.SqlDataInfo) reflect.Value {
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
-		op := &FuncExecOption{}
+		op := &funcExecOption{}
 		var opArgs []any
 		for _, v := range args {
 			val := v.Interface()
@@ -255,6 +255,16 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 					}
 				}
 				fcv.Set(makeDBFuncContext(fct, tdb, action, t, sqlInfo))
+			}
+		}
+	}
+	//check the method of initialization
+	for i := 0; i < dv.NumField(); i++ {
+		f := dv.Field(i)
+		ft := f.Type()
+		if ft.Kind() == reflect.Func {
+			if f.IsNil() {
+				return fmt.Errorf("%s method:%s is not have a sql statement", dt.Name(), dt.Field(i).Name)
 			}
 		}
 	}

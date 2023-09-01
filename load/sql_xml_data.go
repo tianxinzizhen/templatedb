@@ -13,6 +13,7 @@ type Sql struct {
 	Name       string `xml:"name,attr"`
 	NotPrepare bool   `xml:"notPrepare,attr"`
 	Param      string `xml:"param,attr"`
+	Common     bool   `xml:"common,attr"`
 	Statement  string `xml:",chardata"`
 }
 
@@ -77,20 +78,27 @@ func LoadXMLBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 		pkg = sqlRoot.Pkg
 	}
 	var sqlDataInfos []*SqlDataInfo
+	nameUnique := map[string]struct{}{}
 	for _, v := range sqlRoot.Sql {
 		sqlDataInfo := &SqlDataInfo{
 			Name:       v.Func,
 			FuncName:   fmt.Sprintf("%s.%s:%s", pkg, v.Func, v.Name),
 			Sql:        v.Statement,
 			NotPrepare: v.NotPrepare,
+			Common:     v.Common,
 		}
-		if len(v.Param) > 0 {
+		if !v.Common && len(v.Param) > 0 {
 			for _, v := range strings.Split(v.Param, ",") {
 				pname, _, _ := strings.Cut(v, " ")
 				sqlDataInfo.Param = append(sqlDataInfo.Param, strings.TrimSpace(pname))
 			}
 		}
-		sqlDataInfos = append(sqlDataInfos, sqlDataInfo)
+		if _, ok := nameUnique[sqlDataInfo.Name]; ok {
+			return nil, fmt.Errorf("%s.%s load sql info by Duplicate name[%s]", pkg, v.Func, sqlDataInfo.Name)
+		} else {
+			sqlDataInfos = append(sqlDataInfos, sqlDataInfo)
+			nameUnique[sqlDataInfo.Name] = struct{}{}
+		}
 	}
 	return sqlDataInfos, nil
 }

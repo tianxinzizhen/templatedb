@@ -70,6 +70,7 @@ func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 		return nil, err
 	}
 	var sqlDataInfos []*SqlDataInfo
+	nameUnique := map[string]struct{}{}
 	for _, v := range astComment.Decls {
 		if genDecl, ok := v.(*ast.GenDecl); ok {
 			switch genDecl.Tok {
@@ -78,38 +79,55 @@ func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 					if typeSpec, ok := spec.(*ast.TypeSpec); ok {
 						if structType, ok := typeSpec.Type.(*ast.StructType); ok {
 							for _, field := range structType.Fields.List {
-								if fc, ok := field.Type.(*ast.FuncType); ok {
-									sqlDataInfo := &SqlDataInfo{
-										Name:     field.Names[0].String(),
-										FuncName: fmt.Sprintf("%s.%s.%s:", pkg, typeSpec.Name.String(), field.Names[0].String()),
-									}
+								if fc, ok := field.Type.(*ast.FuncType); ok && field.Doc != nil {
 									for _, ci := range field.Doc.List {
+										var sql string
 										if strings.HasPrefix(ci.Text, "//sql") {
-											sqlDataInfo.Sql = ci.Text[5:]
+											sql = ci.Text[5:]
+										} else if strings.HasPrefix(ci.Text, "/*sql") {
+											sql = ci.Text[5 : len(ci.Text)-2]
 										}
-										if strings.HasPrefix(ci.Text, "/*sql") {
-											sqlDataInfo.Sql = ci.Text[5 : len(ci.Text)-2]
+										if len(sql) == 0 {
+											continue
 										}
-										if strings.HasPrefix(ci.Text, "//not-prepare") {
-											sqlDataInfo.NotPrepare = true
+										sqlDataInfo := &SqlDataInfo{
+											Name:     field.Names[0].String(),
+											FuncName: fmt.Sprintf("%s.%s.%s:", pkg, typeSpec.Name.String(), field.Names[0].String()),
+											Sql:      sql,
 										}
-										if strings.HasPrefix(sqlDataInfo.Sql, ":not-prepare") {
-											sqlDataInfo.NotPrepare = true
-											sqlDataInfo.Sql = sqlDataInfo.Sql[len(":not-prepare"):]
-										}
-										if strings.HasPrefix(sqlDataInfo.Sql, ":common") {
-											sqlDataInfo.Common = true
-											sqlDataInfo.Sql = sqlDataInfo.Sql[len(":common"):]
-										}
-									}
-									if fc.Params != nil && len(fc.Params.List) > 0 && len(fc.Params.List[0].Names) > 0 {
-										for _, v := range fc.Params.List {
-											for _, v := range v.Names {
-												sqlDataInfo.Param = append(sqlDataInfo.Param, v.Name)
+										for strings.HasPrefix(sqlDataInfo.Sql, ":") {
+											sqlDataInfo.Sql = sqlDataInfo.Sql[1:]
+											if strings.HasPrefix(sqlDataInfo.Sql, "not-prepare") {
+												sqlDataInfo.NotPrepare = true
+												sqlDataInfo.Sql = sqlDataInfo.Sql[len("not-prepare"):]
+											} else if strings.HasPrefix(sqlDataInfo.Sql, "common=") {
+												sqlDataInfo.Common = true
+												sqlDataInfo.Sql = sqlDataInfo.Sql[len("common="):]
+											commonName:
+												for i := 0; i < len(sqlDataInfo.Sql); i++ {
+													switch sqlDataInfo.Sql[i] {
+													case ' ', '\n', ':':
+														sqlDataInfo.Name = strings.TrimSpace(sqlDataInfo.Sql[:i])
+														sqlDataInfo.Sql = sqlDataInfo.Sql[i:]
+														break commonName
+													}
+												}
 											}
 										}
+										if !sqlDataInfo.Common && fc.Params != nil && len(fc.Params.List) > 0 && len(fc.Params.List[0].Names) > 0 {
+											for _, v := range fc.Params.List {
+												for _, v := range v.Names {
+													sqlDataInfo.Param = append(sqlDataInfo.Param, v.Name)
+												}
+											}
+										}
+										if _, ok := nameUnique[sqlDataInfo.Name]; ok {
+											return nil, fmt.Errorf("%s.%s load sql info by Duplicate name[%s]", pkg, typeSpec.Name.String(), sqlDataInfo.Name)
+										} else {
+											sqlDataInfos = append(sqlDataInfos, sqlDataInfo)
+											nameUnique[sqlDataInfo.Name] = struct{}{}
+										}
 									}
-									sqlDataInfos = append(sqlDataInfos, sqlDataInfo)
 								}
 							}
 						}

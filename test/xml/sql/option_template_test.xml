@@ -1,8 +1,0 @@
-<root pkg="github.com/tianxinzizhen/templatedb/test/xml">
-    <sql func="TestOptionSelectXml" name="">
-        select UserId, Name FROM tbl_test
-    </sql>
-    <sql func="TestOptionSelectXml" name="name11">
-        select  Name FROM tbl_test where Name={param .Name} and  UserId=? 
-    </sql>
-</root>
