@@ -292,8 +292,8 @@ type SqlOption[T any] struct {
 	Result T
 }
 
-func NewSqlOption[T any](ctx context.Context, sql string, param any, result T) SqlOption[T] {
-	return SqlOption[T]{Ctx: ctx, Sql: sql, Param: param, Result: result}
+func NewSqlOption[T any](ctx context.Context, sql string, param any, result T) *SqlOption[T] {
+	return &SqlOption[T]{Ctx: ctx, Sql: sql, Param: param, Result: result}
 }
 
 func (sop *SqlOption[T]) Query(tdb *DBFuncTemplateDB) (T, error) {
