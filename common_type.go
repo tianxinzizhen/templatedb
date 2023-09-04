@@ -32,9 +32,3 @@ type Result struct {
 	LastInsertId int64
 	RowsAffected int64
 }
-
-type ExecResult struct {
-	LastInsertId int64
-	RowsAffected int64
-	err          error
-}

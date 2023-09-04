@@ -9,13 +9,13 @@ import (
 	"github.com/tianxinzizhen/templatedb"
 )
 
-func GetOptionDB() (*templatedb.OptionDB, error) {
+func GetOptionDB() (*templatedb.DBFuncTemplateDB, error) {
 	sqldb, err := sql.Open("mysql", "root:lz@3306!@tcp(mysql.local.lezhichuyou.com:3306)/lz_tour?charset=utf8mb4&parseTime=True&loc=Local")
 	if err != nil {
 		return nil, err
 	}
-	templatedb.LogPrintf = func(ctx context.Context, info string) {
+	templatedb.LogPrintf = func(_ context.Context, info string) {
 		fmt.Println(info)
 	}
-	return templatedb.NewOptionDB(sqldb), nil
+	return templatedb.NewDBFuncTemplateDB(sqldb), nil
 }

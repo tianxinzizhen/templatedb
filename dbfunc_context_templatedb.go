@@ -252,6 +252,11 @@ func (tdb *DBFuncTemplateDB) Recover(ctx context.Context, err *error) {
 	}
 }
 
+func (tdb *DBFuncTemplateDB) ParseSql(tsql string) (*template.Template, error) {
+	return template.New("").Delims(tdb.leftDelim, tdb.rightDelim).SqlParams(tdb.sqlParamsConvert).
+		Funcs(tdb.sqlFunc).Parse(tsql)
+}
+
 func (tdb *DBFuncTemplateDB) sqlTemplateBuild(ctx context.Context, tsql string, parms any) (string, []any, error) {
 	pc, _, line, _ := runtime.Caller(2)
 	if tdb.template == nil {
@@ -283,67 +288,4 @@ func (tdb *DBFuncTemplateDB) sqlTemplateBuild(ctx context.Context, tsql string, 
 		}
 	}
 	return sql, args, err
-}
-
-type SqlOption[T any] struct {
-	Ctx    context.Context
-	Sql    string
-	Param  any
-	Result T
-}
-
-func NewSqlOption[T any](ctx context.Context, sql string, param any, result T) *SqlOption[T] {
-	return &SqlOption[T]{Ctx: ctx, Sql: sql, Param: param, Result: result}
-}
-
-func (sop *SqlOption[T]) Query(tdb *DBFuncTemplateDB) (T, error) {
-	op := &funcExecOption{}
-	op.result = append(op.result, reflect.ValueOf(sop.Result))
-	op.ctx = sop.Ctx
-	op.sql = sop.Sql
-	op.param = sop.Param
-	var db sqlDB = tdb.db
-	if op.ctx == nil {
-		op.ctx = context.Background()
-	} else {
-		tx, ok := FromSqlTx(op.ctx)
-		if ok && tx != nil {
-			db = tx
-		}
-	}
-	var err error
-	op.sql, op.args, err = tdb.sqlTemplateBuild(op.ctx, op.sql, op.param)
-	if err != nil {
-		return sop.Result, err
-	}
-	tdb.query(db, op)
-	return op.result[0].Interface().(T), nil
-}
-func (sop *SqlOption[T]) Exec(tdb *DBFuncTemplateDB) ExecResult {
-	op := &funcExecOption{}
-	op.ctx = sop.Ctx
-	op.sql = sop.Sql
-	op.param = sop.Param
-	var db sqlDB = tdb.db
-	if op.ctx == nil {
-		op.ctx = context.Background()
-	} else {
-		tx, ok := FromSqlTx(op.ctx)
-		if ok && tx != nil {
-			db = tx
-		}
-	}
-	var err error
-	op.sql, op.args, err = tdb.sqlTemplateBuild(op.ctx, op.sql, op.param)
-	if err != nil {
-		return ExecResult{err: err}
-	}
-	result, err := tdb.exec(db, op)
-	if err != nil {
-		return ExecResult{err: err}
-	}
-	if result != nil {
-		return ExecResult{RowsAffected: result.RowsAffected, LastInsertId: result.LastInsertId}
-	}
-	return ExecResult{}
 }
