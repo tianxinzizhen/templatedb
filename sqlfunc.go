@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime"
 	"strings"
 	"time"
 
@@ -304,24 +303,9 @@ const (
 
 var LogPrintf func(ctx context.Context, info string)
 
-func recoverPrintf(ctx context.Context, err error) {
-	if LogPrintf != nil && err != nil {
-		var pc []uintptr = make([]uintptr, MaxStackLen)
-		n := runtime.Callers(3, pc[:])
-		frames := runtime.CallersFrames(pc[:n])
-		sb := strings.Builder{}
-		sb.WriteString(fmt.Sprintf("%v", err))
-		for frame, more := frames.Next(); more; frame, more = frames.Next() {
-			sb.WriteString(fmt.Sprintf("%s:%d \n", frame.File, frame.Line))
-		}
-		LogPrintf(ctx, sb.String())
-	}
-}
-
 var MaxStackLen = 50
 
 type sqlDB interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 }

@@ -166,6 +166,11 @@ func (tdb *DBFuncTemplateDB) exec(db sqlDB, op *funcExecOption) (ret *Result, er
 
 type recoverPanic struct{}
 
+type recordSqlKey struct{}
+type RecordSql struct {
+	Sql []string
+}
+
 func (tdb *DBFuncTemplateDB) enableRecover(ctx context.Context) {
 	if ctx != nil {
 		recoverPanic, ok := ctx.Value(recoverPanic{}).(*bool)
@@ -183,12 +188,27 @@ func (tdb *DBFuncTemplateDB) FromRecover(ctx context.Context) (*bool, bool) {
 	return recoverPanic, ok
 }
 
+func (tdb *DBFuncTemplateDB) FromRecordSql(ctx context.Context) (*RecordSql, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	recordSql, ok := ctx.Value(recordSqlKey{}).(*RecordSql)
+	return recordSql, ok
+}
+
 func (tdb *DBFuncTemplateDB) NewRecover(ctx context.Context) context.Context {
 	if _, ok := tdb.FromRecover(ctx); ok {
 		return ctx
 	}
 	isRecoverPanic := false
 	return context.WithValue(ctx, recoverPanic{}, &isRecoverPanic)
+}
+
+func (tdb *DBFuncTemplateDB) NewRecordSql(ctx context.Context) context.Context {
+	if _, ok := tdb.FromRecordSql(ctx); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, recordSqlKey{}, &RecordSql{})
 }
 
 func (tdb *DBFuncTemplateDB) Begin(ctx context.Context) (context.Context, error) {

@@ -141,6 +141,12 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			}
 			return results
 		}
+		if recordSql, ok := tdb.FromRecordSql(op.ctx); ok {
+			interpolateParamsSql, err := SqlInterpolateParams(op.sql, op.args)
+			if err == nil {
+				recordSql.Sql = append(recordSql.Sql, interpolateParamsSql)
+			}
+		}
 		switch action {
 		case ExecAction:
 			var ret *Result
