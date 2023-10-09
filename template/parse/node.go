@@ -171,8 +171,8 @@ func (t *Tree) newAtSign(pos Pos, text string, vars []string) *AtSignNode {
 	prefixPoundSign := false
 	suffixQuestionMark := false
 	global := false
-	if strings.HasPrefix(fieldName, "@") {
-		fieldName = strings.TrimPrefix(fieldName, "@")
+	if strings.HasPrefix(fieldName, t.lex.atSign) {
+		fieldName = strings.TrimPrefix(fieldName, t.lex.atSign)
 		global = true
 	}
 	if strings.HasPrefix(fieldName, "#") {

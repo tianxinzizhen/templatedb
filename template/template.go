@@ -5,8 +5,10 @@
 package template
 
 import (
+	"encoding/json"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/tianxinzizhen/templatedb/template/parse"
 )
@@ -33,11 +35,12 @@ type Template struct {
 	name string
 	*parse.Tree
 	*common
-	NotPrepare bool
-	Param      []string
-	leftDelim  string
-	rightDelim string
-	sqlParams  func(val reflect.Value) (string, any)
+	NotPrepare      bool
+	Param           []string
+	leftDelim       string
+	rightDelim      string
+	getFieldByName  func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)
+	getParameterMap map[reflect.Type]func(any) (string, any, error)
 }
 
 // New allocates a new, undefined template with the given name.
@@ -64,11 +67,12 @@ func (t *Template) Name() string {
 func (t *Template) New(name string) *Template {
 	t.init()
 	nt := &Template{
-		name:       name,
-		common:     t.common,
-		leftDelim:  t.leftDelim,
-		rightDelim: t.rightDelim,
-		sqlParams:  t.sqlParams,
+		name:            name,
+		common:          t.common,
+		leftDelim:       t.leftDelim,
+		rightDelim:      t.rightDelim,
+		getFieldByName:  t.getFieldByName,
+		getParameterMap: t.getParameterMap,
 	}
 	return nt
 }
@@ -121,11 +125,13 @@ func (t *Template) Clone() (*Template, error) {
 // copy returns a shallow copy of t, with common set to the argument.
 func (t *Template) copy(c *common) *Template {
 	return &Template{
-		name:       t.name,
-		Tree:       t.Tree,
-		common:     c,
-		leftDelim:  t.leftDelim,
-		rightDelim: t.rightDelim,
+		name:            t.name,
+		Tree:            t.Tree,
+		common:          c,
+		leftDelim:       t.leftDelim,
+		rightDelim:      t.rightDelim,
+		getFieldByName:  t.getFieldByName,
+		getParameterMap: t.getParameterMap,
 	}
 }
 
@@ -175,10 +181,41 @@ func (t *Template) Delims(left, right string) *Template {
 	return t
 }
 
-func (t *Template) SqlParams(sqlParams func(val reflect.Value) (string, any)) *Template {
+func (t *Template) GetFieldByName(getFieldByName func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)) *Template {
 	t.init()
-	t.sqlParams = sqlParams
+	t.getFieldByName = getFieldByName
 	return t
+}
+
+func (t *Template) GetParameterMap(getParameterMap map[reflect.Type]func(any) (string, any, error)) *Template {
+	t.init()
+	t.getParameterMap = getParameterMap
+	return t
+}
+
+func (t *Template) GetParameter(arg any) (string, any, error) {
+	ps := "?"
+	if t.getParameterMap != nil {
+		if fn, ok := t.getParameterMap[reflect.TypeOf(arg)]; ok {
+			var err error
+			ps, arg, err = fn(arg)
+			if err != nil {
+				return "", nil, err
+			}
+		}
+	}
+	if arg != nil && reflect.TypeOf(arg).Kind() == reflect.Struct {
+		switch arg.(type) {
+		case time.Time, *time.Time:
+		default:
+			argJson, err := json.Marshal(arg)
+			if err != nil {
+				return "", nil, err
+			}
+			arg = string(argJson)
+		}
+	}
+	return ps, arg, nil
 }
 
 // Funcs adds the elements of the argument map to the template's function map.
@@ -224,6 +261,14 @@ func (t *Template) Parse(text string) (*Template, error) {
 	t.muFuncs.RUnlock()
 	if err != nil {
 		return nil, err
+	}
+	if t.getParameterMap == nil {
+		t.getParameterMap = make(map[reflect.Type]func(any) (string, any, error))
+	}
+	if t.getFieldByName == nil {
+		t.getFieldByName = func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool) {
+			return t.FieldByName(fieldName)
+		}
 	}
 	// Add the newly parsed trees, including the one for t, into our common structure.
 	for name, tree := range trees {

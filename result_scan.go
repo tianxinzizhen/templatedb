@@ -6,10 +6,24 @@ import (
 	"reflect"
 
 	"github.com/tianxinzizhen/templatedb/scanner"
-	"github.com/tianxinzizhen/templatedb/template"
 )
 
-func newScanDestByValues(sqlParamType map[reflect.Type]struct{}, columns []*sql.ColumnType, ret []reflect.Value) (destSlice []any, more bool, arrayLen int, err error) {
+var tempScanDest map[reflect.Type]any
+
+// 创建临时扫描字段
+func getTempScanDest(scanType reflect.Type) any {
+	if tempScanDest == nil {
+		tempScanDest = make(map[reflect.Type]any)
+	}
+	if dest, ok := tempScanDest[scanType]; !ok {
+		dest := reflect.New(scanType).Interface()
+		tempScanDest[scanType] = dest
+		return dest
+	} else {
+		return dest
+	}
+}
+func (tdb *DBFuncTemplateDB) newScanDestByValues(columns []*sql.ColumnType, ret []reflect.Value) (destSlice []any, more bool, arrayLen int, err error) {
 	if len(ret) == 0 {
 		return nil, false, 0, fmt.Errorf("not scan dest")
 	}
@@ -26,12 +40,15 @@ func newScanDestByValues(sqlParamType map[reflect.Type]struct{}, columns []*sql.
 		for t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
-		if _, ok := sqlParamType[t]; t.Kind() == reflect.Struct && !ok {
+		if _, ok := tdb.getParameterMap[t]; t.Kind() == reflect.Struct && !ok {
 			scanMapIndex := make(map[string]int)
 			for _, item := range columns {
-				f, ok := template.GetFieldByName(t, item.Name(), scanMapIndex)
+				f, ok := DefaultGetFieldByName(t, item.Name(), scanMapIndex)
 				if ok {
-					destSlice = append(destSlice, &scanner.StructScanner{Convert: scanConvertByDatabaseType[item.DatabaseTypeName()], Index: f.Index})
+					destSlice = append(destSlice, &scanner.StructScanner{
+						Index:        f.Index,
+						SetParameter: tdb.setParameterMap[f.Type],
+					})
 				} else {
 					destSlice = append(destSlice, getTempScanDest(item.ScanType()))
 				}
@@ -50,8 +67,8 @@ func newScanDestByValues(sqlParamType map[reflect.Type]struct{}, columns []*sql.
 		} else {
 			if len(columns) > 0 {
 				destSlice = append(destSlice, &scanner.ParameterScanner{
-					Column:  columns[0],
-					Convert: scanConvertByDatabaseType[columns[0].DatabaseTypeName()],
+					Column:       columns[0],
+					SetParameter: tdb.setParameterMap[ret[0].Type()],
 				})
 				for i := 1; i < len(columns); i++ {
 					destSlice = append(destSlice, getTempScanDest(columns[i].ScanType()))
@@ -62,8 +79,8 @@ func newScanDestByValues(sqlParamType map[reflect.Type]struct{}, columns []*sql.
 		if len(columns) > 0 {
 			for i := 0; i < len(columns); i++ {
 				destSlice = append(destSlice, &scanner.ParameterScanner{
-					Column:  columns[i],
-					Convert: scanConvertByDatabaseType[columns[i].DatabaseTypeName()],
+					Column:       columns[i],
+					SetParameter: tdb.setParameterMap[ret[i].Type()],
 				})
 			}
 		}
@@ -71,7 +88,7 @@ func newScanDestByValues(sqlParamType map[reflect.Type]struct{}, columns []*sql.
 	return destSlice, more, arrayLen, nil
 }
 
-func nextNewScanDest(ret []reflect.Value, scanRows []any) {
+func (tdb *DBFuncTemplateDB) nextNewScanDest(ret []reflect.Value, scanRows []any) {
 	if len(ret) == 1 {
 		rt := ret[0].Type()
 		if rt.Kind() == reflect.Array || rt.Kind() == reflect.Slice {
@@ -83,7 +100,7 @@ func nextNewScanDest(ret []reflect.Value, scanRows []any) {
 			rv.Set(reflect.New(rt))
 			rv = rv.Elem()
 		}
-		if _, ok := sqlParamType[rt]; rt.Kind() == reflect.Struct && !ok {
+		if _, ok := tdb.getParameterMap[rt]; rt.Kind() == reflect.Struct && !ok {
 			for _, v := range scanRows {
 				if vi, ok := v.(*scanner.StructScanner); ok {
 					vi.Dest = rv

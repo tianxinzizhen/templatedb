@@ -101,7 +101,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 				}
 				switch pvt.Kind() {
 				case reflect.Map, reflect.Slice, reflect.Array, reflect.Struct:
-					if _, ok := tdb.sqlParamType[pvt]; ok {
+					if _, ok := tdb.getParameterMap[pvt]; ok {
 						opArgs = append(opArgs, val)
 					} else {
 						op.param = val
@@ -189,7 +189,10 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 		return errors.New("DBFuncContextInit in(dbFuncStruct) is not valid")
 	}
 	dt := dv.Type()
-	tp := template.New(dt.Name()).Delims(tdb.leftDelim, tdb.rightDelim).SqlParams(tdb.sqlParamsConvert).Funcs(tdb.sqlFunc)
+	tp := template.New(dt.Name()).Delims(tdb.leftDelim, tdb.rightDelim).
+		GetFieldByName(tdb.getFieldByName).
+		GetParameterMap(tdb.getParameterMap).
+		Funcs(tdb.sqlFunc)
 	var sqlInfos []*load.SqlDataInfo
 	var err error
 	//添加数据信息

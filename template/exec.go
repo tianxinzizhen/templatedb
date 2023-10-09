@@ -24,7 +24,6 @@ var maxExecDepth = initMaxExecDepth()
 
 // prevent SQL escape
 var SqlEscape func(arg any) (sql string, err error)
-var TagAsFieldName func(tag reflect.StructTag, fieldName string) bool
 
 func initMaxExecDepth() int {
 	if runtime.GOARCH == "wasm" {
@@ -337,10 +336,10 @@ func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 		if val == zero {
 			arg = nil
 		} else {
-			if s.tmpl.sqlParams != nil {
-				ps, arg = s.tmpl.sqlParams(val)
-			} else {
-				arg = val.Interface()
+			var err error
+			ps, arg, err = s.tmpl.GetParameter(val.Interface())
+			if err != nil {
+				s.writeError(fmt.Errorf("evalParam output print:%s", err))
 			}
 		}
 		s.args = append(s.args, arg)
@@ -352,13 +351,11 @@ func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 		if s.qi < len(s.qArgs) {
 			arg := s.qArgs[s.qi]
 			s.qi++ //param index next argument
-			if s.tmpl.sqlParams != nil && arg != nil {
-				var ps string
-				ps, arg = s.tmpl.sqlParams(reflect.ValueOf(arg))
-				s.wr.Write([]byte(ps))
-			} else {
-				s.wr.Write([]byte("?"))
+			ps, arg, err := s.tmpl.GetParameter(arg)
+			if err != nil {
+				s.writeError(fmt.Errorf("evalParam output print:%s", err))
 			}
+			s.wr.Write([]byte(ps))
 			s.args = append(s.args, arg)
 		} else {
 			panic(fmt.Errorf("the sql parameter[%d] is missing", s.qi))
@@ -383,11 +380,10 @@ func (s *state) evalAtSign(val reflect.Value, node *parse.AtSignNode) {
 		arg = nil
 		val = reflect.ValueOf(arg)
 	} else {
-		if s.tmpl.sqlParams != nil {
-			ps, arg = s.tmpl.sqlParams(val)
-			val = reflect.ValueOf(arg)
-		} else {
-			arg = val.Interface()
+		var err error
+		ps, arg, err = s.tmpl.GetParameter(val.Interface())
+		if err != nil {
+			s.writeError(fmt.Errorf("evalAtSign output print:%s", err))
 		}
 	}
 	if node.SuffixQuestionMark {
@@ -735,43 +731,6 @@ func (s *state) evalFunction(dot reflect.Value, node *parse.IdentifierNode, cmd 
 	return s.evalCall(dot, function, isBuiltin, cmd, name, args, final)
 }
 
-func GetFieldByTag(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool) {
-	for i := 0; i < t.NumField(); i++ {
-		tf := t.Field(i)
-		if TagAsFieldName != nil && TagAsFieldName(tf.Tag, fieldName) {
-			return tf, true
-		}
-		if tf.Anonymous && tf.Type.Kind() == reflect.Struct {
-			f, ok = GetFieldByTag(tf.Type, fieldName, scanNum)
-			if ok {
-				if scanNum != nil {
-					if _, ok := scanNum[f.Name]; ok {
-						if i <= scanNum[f.Name] {
-							continue
-						} else {
-							scanNum[f.Name] = i
-						}
-					} else {
-						scanNum[f.Name] = i
-					}
-				}
-				f.Index = append(tf.Index, f.Index...)
-				return
-			}
-		}
-	}
-	return
-}
-
-func GetFieldByName(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool) {
-	tField, ok := t.FieldByName(fieldName)
-	if ok {
-		return tField, ok
-	}
-	f, ok = GetFieldByTag(t, fieldName, scanNum)
-	return
-}
-
 // evalField evaluates an expression like (.Field) or (.Field arg1 arg2).
 // The 'final' argument represents the return value from the preceding
 // value of the pipeline, if any.
@@ -804,7 +763,7 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 	// It's not a method; must be a field of a struct or an element of a map.
 	switch receiver.Kind() {
 	case reflect.Struct:
-		tField, ok := GetFieldByName(receiver.Type(), fieldName, nil)
+		tField, ok := s.tmpl.getFieldByName(receiver.Type(), fieldName, nil)
 		if ok {
 			field, err := receiver.FieldByIndexErr(tField.Index)
 			if !tField.IsExported() {
@@ -868,7 +827,7 @@ func (s *state) getField(receiver reflect.Value, fieldName string) (val reflect.
 	// It's not a method; must be a field of a struct or an element of a map.
 	switch receiver.Kind() {
 	case reflect.Struct:
-		tField, ok := GetFieldByName(receiver.Type(), fieldName, nil)
+		tField, ok := s.tmpl.getFieldByName(receiver.Type(), fieldName, nil)
 		if ok {
 			field, err := receiver.FieldByIndexErr(tField.Index)
 			if !tField.IsExported() {
@@ -1007,16 +966,13 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 		sb.WriteString(ps[0])
 		resultArgs := params.Interface().([]any)
 		for i, v := range resultArgs {
-			if s.tmpl.sqlParams != nil && v != nil {
-				pitem, arg := s.tmpl.sqlParams(reflect.ValueOf(v))
-				s.args = append(s.args, arg)
-				sb.WriteString(pitem)
-				sb.WriteString(ps[i+1])
-			} else {
-				s.args = append(s.args, v)
-				sb.WriteString("?")
-				sb.WriteString(ps[i+1])
+			pitem, arg, err := s.tmpl.GetParameter(v)
+			if err != nil {
+				s.writeError(fmt.Errorf("evalCall output print:%s", err))
 			}
+			s.args = append(s.args, arg)
+			sb.WriteString(pitem)
+			sb.WriteString(ps[i+1])
 		}
 		v = reflect.ValueOf(sb.String())
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"time"
 
 	"github.com/tianxinzizhen/templatedb/template"
 )
@@ -14,10 +15,11 @@ import (
 type DBFuncTemplateDB struct {
 	db                    *sql.DB
 	leftDelim, rightDelim string
-	sqlParamsConvert      func(val reflect.Value) (string, any)
 	sqlDebug              bool
 	logFunc               func(ctx context.Context, info string)
-	sqlParamType          map[reflect.Type]struct{}
+	getFieldByName        func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)
+	getParameterMap       map[reflect.Type]func(any) (string, any, error)
+	setParameterMap       map[reflect.Type]func(src any) (any, error)
 	sqlFunc               template.FuncMap
 	template              map[uintptr]map[int]*template.Template
 }
@@ -25,10 +27,6 @@ type DBFuncTemplateDB struct {
 func (tdb *DBFuncTemplateDB) Delims(leftDelim, rightDelim string) {
 	tdb.leftDelim = leftDelim
 	tdb.rightDelim = rightDelim
-}
-
-func (tdb *DBFuncTemplateDB) SqlParamsConvert(sqlParamsConvert func(val reflect.Value) (string, any)) {
-	tdb.sqlParamsConvert = sqlParamsConvert
 }
 
 func (tdb *DBFuncTemplateDB) SqlDebug(sqlDebug bool) {
@@ -39,27 +37,60 @@ func (tdb *DBFuncTemplateDB) LogFunc(logFunc func(ctx context.Context, info stri
 	tdb.logFunc = logFunc
 }
 
-func (tdb *DBFuncTemplateDB) AddSqlParamType(t reflect.Type) {
-	tdb.sqlParamType[t] = struct{}{}
+func (tdb *DBFuncTemplateDB) AddTemplateFunc(key string, funcMethod any) {
+	tdb.sqlFunc[key] = funcMethod
 }
-func (tdb *DBFuncTemplateDB) AddTemplateFunc(key string, funcMethod any) error {
-	if _, ok := sqlFunc[key]; ok {
-		return fmt.Errorf("add template func[%s] already exists ", key)
+
+func (tdb *DBFuncTemplateDB) AddAllTemplateFunc(sqlFunc template.FuncMap) {
+	for k, v := range sqlFunc {
+		tdb.sqlFunc[k] = v
+	}
+}
+
+func (tdb *DBFuncTemplateDB) AddGetParameter(t reflect.Type, getParameter func(any) (string, any, error)) error {
+	if _, ok := tdb.getParameterMap[t]; ok {
+		return fmt.Errorf("add GetParameter type [%s] already exists ", t)
 	} else {
-		tdb.sqlFunc[key] = funcMethod
+		tdb.getParameterMap[t] = getParameter
 	}
 	return nil
 }
+
+func (tdb *DBFuncTemplateDB) AddSetParameter(t reflect.Type, setParameter func(src any) (any, error)) error {
+	if _, ok := tdb.setParameterMap[t]; ok {
+		return fmt.Errorf("add SetParameter type [%s] already exists ", t)
+	} else {
+		tdb.setParameterMap[t] = setParameter
+	}
+	return nil
+}
+
+func (tdb *DBFuncTemplateDB) AddScan(t reflect.Type, setParameter func(src any) (any, error)) error {
+	return tdb.AddSetParameter(t, setParameter)
+}
+
+func (tdb *DBFuncTemplateDB) GetFieldByName(getFieldByName func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)) {
+	if getFieldByName != nil {
+		tdb.getFieldByName = getFieldByName
+	}
+}
+
 func NewDBFuncTemplateDB(sqlDB *sql.DB) *DBFuncTemplateDB {
 	tdb := &DBFuncTemplateDB{
 		db:        sqlDB,
 		leftDelim: "{", rightDelim: "}",
-		sqlParamType: make(map[reflect.Type]struct{}),
-		sqlFunc:      make(template.FuncMap),
+		sqlFunc:         make(template.FuncMap),
+		getFieldByName:  DefaultGetFieldByName,
+		getParameterMap: make(map[reflect.Type]func(any) (string, any, error)),
+		setParameterMap: make(map[reflect.Type]func(src any) (any, error)),
 	}
-	for k, v := range sqlParamType {
-		tdb.sqlParamType[k] = v
+	//default time get paramter
+	tp := reflect.TypeOf(&time.Time{})
+	tp_get := func(t any) (string, any, error) {
+		return "?", t, nil
 	}
+	tdb.getParameterMap[tp] = tp_get
+	tdb.getParameterMap[tp.Elem()] = tp_get
 	for k, v := range sqlFunc {
 		tdb.sqlFunc[k] = v
 	}
@@ -121,13 +152,13 @@ func (tdb *DBFuncTemplateDB) query(db sqlDB, op *funcExecOption) error {
 	if err != nil {
 		return err
 	}
-	dest, more, arrayLen, err := newScanDestByValues(tdb.sqlParamType, columns, op.result)
+	dest, more, arrayLen, err := tdb.newScanDestByValues(columns, op.result)
 	if err != nil {
 		return err
 	}
 	i := 0
 	for rows.Next() {
-		nextNewScanDest(op.result, dest)
+		tdb.nextNewScanDest(op.result, dest)
 		err = rows.Scan(dest...)
 		if err != nil {
 			return err
@@ -273,7 +304,9 @@ func (tdb *DBFuncTemplateDB) Recover(ctx context.Context, err *error) {
 }
 
 func (tdb *DBFuncTemplateDB) ParseSql(tsql string) (*template.Template, error) {
-	return template.New("").Delims(tdb.leftDelim, tdb.rightDelim).SqlParams(tdb.sqlParamsConvert).
+	return template.New("").Delims(tdb.leftDelim, tdb.rightDelim).
+		GetFieldByName(tdb.getFieldByName).
+		GetParameterMap(tdb.getParameterMap).
 		Funcs(tdb.sqlFunc).Parse(tsql)
 }
 
@@ -286,8 +319,7 @@ func (tdb *DBFuncTemplateDB) sqlTemplateBuild(ctx context.Context, tsql string, 
 		tdb.template[pc] = make(map[int]*template.Template)
 	}
 	if _, ok := tdb.template[pc][line]; !ok {
-		templateSql, err := template.New("").Delims(tdb.leftDelim, tdb.rightDelim).SqlParams(tdb.sqlParamsConvert).
-			Funcs(tdb.sqlFunc).Parse(tsql)
+		templateSql, err := tdb.ParseSql(tsql)
 		if err != nil {
 			return "", nil, err
 		}

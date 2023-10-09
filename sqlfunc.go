@@ -8,17 +8,13 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
-	"github.com/tianxinzizhen/templatedb/scanner"
 	"github.com/tianxinzizhen/templatedb/template"
 
 	"github.com/tianxinzizhen/templatedb/util"
 )
 
 var sqlFunc template.FuncMap = make(template.FuncMap)
-
-var sqlParamType map[reflect.Type]struct{} = make(map[reflect.Type]struct{})
 
 var SqlEscapeBytesBackslash = false
 
@@ -42,101 +38,7 @@ func comma(iVal reflect.Value) (string, error) {
 		return "", nil
 	}
 }
-func inParam(list reflect.Value, fieldNames ...string) (string, []any, error) {
-	list, isNil := util.Indirect(list)
-	if isNil {
-		return "in(NULL)", nil, nil
-	}
-	if list.Kind() == reflect.Slice || list.Kind() == reflect.Array {
-		sb := strings.Builder{}
-		sb.WriteString("in (")
-		var args []any = make([]any, 0, list.Len())
-		exists := make(map[any]any)
-		for i := 0; i < list.Len(); i++ {
-			item, isNil := util.Indirect(list.Index(i))
-			if isNil {
-				continue
-			}
-			if !item.IsValid() {
-				continue
-			}
-			switch item.Kind() {
-			case reflect.Struct:
-				sv := item
-				for i := 0; i < len(fieldNames); i++ {
-					fieldName := fieldNames[i]
-					sv, isNil = util.Indirect(sv)
-					if isNil {
-						args = append(args, nil)
-						break
-					}
-					tField, ok := template.GetFieldByName(sv.Type(), fieldName, nil)
-					if ok {
-						field, err := sv.FieldByIndexErr(tField.Index)
-						if err != nil {
-							return "", nil, err
-						}
-						if i == len(fieldNames)-1 {
-							if field.Kind() == reflect.Slice || field.Kind() == reflect.Array {
-								for i := 0; i < field.Len(); i++ {
-									val := field.Index(i).Interface()
-									if _, ok := exists[val]; !ok {
-										exists[val] = struct{}{}
-										args = append(args, val)
-									}
-								}
-							} else {
-								val := field.Interface()
-								if _, ok := exists[val]; !ok {
-									exists[val] = struct{}{}
-									args = append(args, val)
-								}
-							}
-						} else {
-							sv = field
-						}
-					} else {
-						return "", nil, fmt.Errorf("in params : The attribute %s was not found in the structure %s.%s", fieldName, item.Type().PkgPath(), item.Type().Name())
-					}
-				}
-			case reflect.Map:
-				if item.Type().Key().Kind() == reflect.String {
-					fieldValue := item.MapIndex(reflect.ValueOf(fmt.Sprint(fieldNames)))
-					if fieldValue.IsValid() {
-						val := fieldValue.Interface()
-						if _, ok := exists[val]; !ok {
-							exists[val] = struct{}{}
-							args = append(args, val)
-						}
-					} else {
-						return "", nil, fmt.Errorf("in params : fieldValue in map[%s] IsValid", fmt.Sprint(fieldNames))
-					}
-				} else {
-					return "", nil, fmt.Errorf("in params : Map key Type is not string")
-				}
-			default:
-				val := item.Interface()
-				if _, ok := exists[val]; !ok {
-					exists[val] = struct{}{}
-					args = append(args, val)
-				}
-			}
-		}
-		for i := range args {
-			if i > 0 {
-				sb.WriteByte(',')
-			}
-			sb.WriteByte('?')
-		}
-		if len(args) == 0 {
-			sb.WriteString("NULL")
-		}
-		sb.WriteString(")")
-		return sb.String(), args, nil
-	} else {
-		return "", nil, errors.New("in params : variables are not arrays or slices")
-	}
-}
+
 func params(list ...reflect.Value) (string, []any) {
 	sb := strings.Builder{}
 	var args []any = make([]any, len(list))
@@ -216,7 +118,8 @@ func SqlEscape(arg any) (sql string, err error) {
 func SqlInterpolateParams(query string, arg []any) (sql string, err error) {
 	return util.InterpolateParams(query, arg, SqlEscapeBytesBackslash)
 }
-func JsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
+
+func jsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
 	if asName, ok := tag.Lookup("json"); ok {
 		if asName == "-" {
 			return false
@@ -234,38 +137,45 @@ func JsonTagAsFieldName(tag reflect.StructTag, fieldName string) bool {
 	return false
 }
 
-func JsonConvertStruct(field reflect.Value, src any) error {
-	if src == nil {
-		return nil
-	}
-	if field.Kind() == reflect.Pointer {
-		if field.IsNil() {
-			field.Set(reflect.New(field.Type().Elem()))
+func getFieldByTag(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool) {
+	for i := 0; i < t.NumField(); i++ {
+		tf := t.Field(i)
+		if jsonTagAsFieldName(tf.Tag, fieldName) {
+			return tf, true
 		}
-		field = field.Elem()
-	}
-	if field.Kind() == reflect.Slice {
-		if field.IsNil() {
-			field.Set(reflect.MakeSlice(field.Type(), 0, 10))
+		if tf.Anonymous && tf.Type.Kind() == reflect.Struct {
+			f, ok = getFieldByTag(tf.Type, fieldName, scanNum)
+			if ok {
+				if scanNum != nil {
+					if _, ok := scanNum[f.Name]; ok {
+						if i <= scanNum[f.Name] {
+							continue
+						} else {
+							scanNum[f.Name] = i
+						}
+					} else {
+						scanNum[f.Name] = i
+					}
+				}
+				f.Index = append(tf.Index, f.Index...)
+				return
+			}
 		}
 	}
-	if field.Kind() == reflect.Map {
-		if field.IsNil() {
-			field.Set(reflect.MakeMap(field.Type()))
-		}
+	return
+}
+func DefaultGetFieldByName(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool) {
+	tField, ok := t.FieldByName(fieldName)
+	if ok {
+		return tField, ok
 	}
-	if field.Kind() == reflect.Struct || field.Kind() == reflect.Slice || field.Kind() == reflect.Map {
-		return json.Unmarshal(src.([]byte), field.Addr().Interface())
-	} else {
-		return scanner.ConvertAssign(field.Addr().Interface(), src)
-	}
-
+	f, ok = getFieldByTag(t, fieldName, scanNum)
+	return
 }
 
 func init() {
 	//sql 函数的加载
 	AddTemplateFunc("comma", comma)
-	AddTemplateFunc("in", inParam)
 	AddTemplateFunc("like", like)
 	AddTemplateFunc("liker", likeRight)
 	AddTemplateFunc("likel", likeLeft)
@@ -274,12 +184,6 @@ func init() {
 	AddTemplateFunc("json", marshal)
 	//模版@#号字符串拼接时对字段值转化成sql字符串函数
 	template.SqlEscape = SqlEscape
-	//使用tag为字段取别名
-	template.TagAsFieldName = JsonTagAsFieldName
-	//mysql的json字段处理
-	AddScanConvertDatabaseTypeFunc("JSON", JsonConvertStruct)
-	//添加时间为sql参数类型
-	AddSqlParamType(reflect.TypeOf(time.Time{}))
 }
 
 func AddTemplateFunc(key string, funcMethod any) error {
@@ -289,9 +193,6 @@ func AddTemplateFunc(key string, funcMethod any) error {
 		sqlFunc[key] = funcMethod
 	}
 	return nil
-}
-func AddSqlParamType(t reflect.Type) {
-	sqlParamType[t] = struct{}{}
 }
 
 type TemplateDBContextType int
@@ -308,4 +209,349 @@ var MaxStackLen = 50
 type sqlDB interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+type commonSqlFunc struct {
+	getFieldByName func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)
+}
+
+func GetCommonSqlFunc(getFieldByName func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)) template.FuncMap {
+	cf := &commonSqlFunc{getFieldByName: getFieldByName}
+	sqlFunc = make(template.FuncMap)
+	sqlFunc["in"] = cf.inParam
+	sqlFunc["value"] = cf.value
+	sqlFunc["values"] = cf.values
+	sqlFunc["set"] = cf.set
+	sqlFunc["setl"] = cf.setl
+	sqlFunc["setr"] = cf.setr
+	sqlFunc["if_and"] = cf.if_and
+	return sqlFunc
+}
+func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
+	for ; v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface; v = v.Elem() {
+		if v.IsNil() {
+			return v, true
+		}
+	}
+	return v, false
+}
+
+func (s *commonSqlFunc) inParam(list reflect.Value, fieldNames ...string) (string, []any, error) {
+	list, isNil := util.Indirect(list)
+	if isNil {
+		return "in(NULL)", nil, nil
+	}
+	if list.Kind() == reflect.Slice || list.Kind() == reflect.Array {
+		sb := strings.Builder{}
+		sb.WriteString("in (")
+		var args []any = make([]any, 0, list.Len())
+		exists := make(map[any]any)
+		for i := 0; i < list.Len(); i++ {
+			item, isNil := util.Indirect(list.Index(i))
+			if isNil {
+				continue
+			}
+			if !item.IsValid() {
+				continue
+			}
+			switch item.Kind() {
+			case reflect.Struct:
+				sv := item
+				for i := 0; i < len(fieldNames); i++ {
+					fieldName := fieldNames[i]
+					sv, isNil = util.Indirect(sv)
+					if isNil {
+						args = append(args, nil)
+						break
+					}
+					tField, ok := s.getFieldByName(sv.Type(), fieldName, nil)
+					if ok {
+						field, err := sv.FieldByIndexErr(tField.Index)
+						if err != nil {
+							return "", nil, err
+						}
+						if i == len(fieldNames)-1 {
+							if field.Kind() == reflect.Slice || field.Kind() == reflect.Array {
+								for i := 0; i < field.Len(); i++ {
+									val := field.Index(i).Interface()
+									if _, ok := exists[val]; !ok {
+										exists[val] = struct{}{}
+										args = append(args, val)
+									}
+								}
+							} else {
+								val := field.Interface()
+								if _, ok := exists[val]; !ok {
+									exists[val] = struct{}{}
+									args = append(args, val)
+								}
+							}
+						} else {
+							sv = field
+						}
+					} else {
+						return "", nil, fmt.Errorf("in params : The attribute %s was not found in the structure %s.%s", fieldName, item.Type().PkgPath(), item.Type().Name())
+					}
+				}
+			case reflect.Map:
+				if item.Type().Key().Kind() == reflect.String {
+					fieldValue := item.MapIndex(reflect.ValueOf(fmt.Sprint(fieldNames)))
+					if fieldValue.IsValid() {
+						val := fieldValue.Interface()
+						if _, ok := exists[val]; !ok {
+							exists[val] = struct{}{}
+							args = append(args, val)
+						}
+					} else {
+						return "", nil, fmt.Errorf("in params : fieldValue in map[%s] IsValid", fmt.Sprint(fieldNames))
+					}
+				} else {
+					return "", nil, fmt.Errorf("in params : Map key Type is not string")
+				}
+			default:
+				val := item.Interface()
+				if _, ok := exists[val]; !ok {
+					exists[val] = struct{}{}
+					args = append(args, val)
+				}
+			}
+		}
+		for i := range args {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteByte('?')
+		}
+		if len(args) == 0 {
+			sb.WriteString("NULL")
+		}
+		sb.WriteString(")")
+		return sb.String(), args, nil
+	} else {
+		return "", nil, errors.New("in params : variables are not arrays or slices")
+	}
+}
+
+func (s *commonSqlFunc) value(val reflect.Value, value string) (string, []any, error) {
+	values := strings.Split(value, ",")
+	sqlBuilder := strings.Builder{}
+	args := make([]any, 0, len(values))
+	val, isNil := indirect(val)
+	if isNil {
+		return "", nil, fmt.Errorf("value sql function in(0) is nil")
+	}
+	for i, column := range values {
+		if i > 0 {
+			sqlBuilder.WriteRune(',')
+		}
+		ps := "?"
+		column = strings.TrimSpace(column)
+		switch column {
+		case "CURRENT_TIMESTAMP":
+			sqlBuilder.WriteString(column)
+		default:
+			switch val.Kind() {
+			case reflect.Struct:
+				tField, ok := s.getFieldByName(val.Type(), column, nil)
+				if ok {
+					field, err := val.FieldByIndexErr(tField.Index)
+					if err != nil {
+						return "", nil, err
+					}
+					args = append(args, field.Interface())
+				}
+			case reflect.Map:
+				if val.Type().Key().Kind() == reflect.String {
+					args = append(args, val.MapIndex(reflect.ValueOf(column)).Interface())
+				}
+			}
+			sqlBuilder.WriteString(ps)
+		}
+	}
+	return sqlBuilder.String(), args, nil
+}
+
+func (s *commonSqlFunc) values(sVal reflect.Value, value string) (string, []any, error) {
+	values := strings.Split(value, ",")
+	sqlBuilder := strings.Builder{}
+	sqlBuilder.WriteString(" VALUES ")
+	if sVal.Kind() != reflect.Slice {
+		return "", nil, fmt.Errorf("values sql function in(0) is not slice")
+	}
+	args := make([]any, 0, len(values)*sVal.Len())
+	for i := 0; i < sVal.Len(); i++ {
+		if i > 0 {
+			sqlBuilder.WriteRune(',')
+		}
+		sqlBuilder.WriteString("(")
+		val, isNil := indirect(sVal.Index(i))
+		if isNil {
+			return "", nil, fmt.Errorf("value sql function in(0) is nil")
+		}
+		for j, column := range values {
+			if j > 0 {
+				sqlBuilder.WriteRune(',')
+			}
+			ps := "?"
+			column = strings.TrimSpace(column)
+			switch column {
+			case "CURRENT_TIMESTAMP":
+				sqlBuilder.WriteString(column)
+			default:
+				switch val.Kind() {
+				case reflect.Struct:
+					tField, ok := s.getFieldByName(val.Type(), column, nil)
+					if ok {
+						field, err := val.FieldByIndexErr(tField.Index)
+						if err != nil {
+							return "", nil, err
+						}
+						args = append(args, field.Interface())
+					}
+				case reflect.Map:
+					if val.Type().Key().Kind() == reflect.String {
+						args = append(args, val.MapIndex(reflect.ValueOf(column)).Interface())
+					}
+				}
+				sqlBuilder.WriteString(ps)
+			}
+		}
+		sqlBuilder.WriteString(")")
+	}
+	return sqlBuilder.String(), args, nil
+}
+
+func (s *commonSqlFunc) set(val reflect.Value, action []string, value string) (string, []any, error) {
+	val, isNil := indirect(val)
+	if isNil {
+		return "", nil, fmt.Errorf("value sql function in(0) is nil")
+	}
+	actionMap := make(map[string]struct{})
+	for _, v := range action {
+		actionMap[v] = struct{}{}
+	}
+	values := strings.Split(value, ",")
+	sqlBuilder := strings.Builder{}
+	var args []any
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if _, ok := actionMap[v]; !ok {
+			continue
+		}
+		ps := "?"
+		var arg any
+		switch val.Kind() {
+		case reflect.Struct:
+			tField, ok := s.getFieldByName(val.Type(), v, nil)
+			if ok {
+				field, err := val.FieldByIndexErr(tField.Index)
+				if err != nil {
+					return "", nil, err
+				}
+				arg = field.Interface()
+			}
+		case reflect.Map:
+			if val.Type().Key().Kind() == reflect.String {
+				arg = val.MapIndex(reflect.ValueOf(v)).Interface()
+			}
+		}
+		if len(args) > 0 {
+			sqlBuilder.WriteRune(',')
+		}
+		sqlBuilder.WriteString(v)
+		sqlBuilder.WriteString("=")
+		sqlBuilder.WriteString(ps)
+		args = append(args, arg)
+	}
+	return sqlBuilder.String(), args, nil
+}
+
+func (s *commonSqlFunc) if_and(val reflect.Value, value string) (string, []any, error) {
+	val, isNil := indirect(val)
+	if isNil {
+		return "", nil, fmt.Errorf("value sql function in(0) is nil")
+	}
+	values := strings.Split(value, ",")
+	sqlBuilder := strings.Builder{}
+	var args []any
+	for _, column := range values {
+		column = strings.TrimSpace(column)
+		var asName = ""
+		if before, after, found := strings.Cut(column, "."); found {
+			asName = fmt.Sprintf("%s.", before)
+			column = after
+		}
+		var preFuzzy, sufFuzzy bool
+		if strings.HasPrefix(column, "%") {
+			preFuzzy = true
+			column = strings.TrimPrefix(column, "%")
+		}
+		if strings.HasSuffix(column, "%") {
+			sufFuzzy = true
+			column = strings.TrimSuffix(column, "%")
+		}
+		ps := "?"
+		var arg any
+		switch val.Kind() {
+		case reflect.Struct:
+			tField, ok := s.getFieldByName(val.Type(), column, nil)
+			if ok {
+				field, err := val.FieldByIndexErr(tField.Index)
+				if err != nil {
+					return "", nil, err
+				}
+				arg = field.Interface()
+				if truth, _ := template.IsTrue(arg); !truth {
+					continue
+				}
+			} else {
+				continue
+			}
+		case reflect.Map:
+			if val.Type().Key().Kind() == reflect.String {
+				arg = val.MapIndex(reflect.ValueOf(column)).Interface()
+				if truth, _ := template.IsTrue(arg); !truth {
+					continue
+				}
+			} else {
+				continue
+			}
+		}
+		sqlBuilder.WriteString(" and ")
+		sqlBuilder.WriteString(asName)
+		sqlBuilder.WriteString(column)
+		if preFuzzy || sufFuzzy {
+			sqlBuilder.WriteString(" like ")
+			sqlBuilder.WriteString(ps)
+			argBuilder := &strings.Builder{}
+			if preFuzzy {
+				argBuilder.WriteString("%")
+			}
+			argBuilder.WriteString(fmt.Sprint(arg))
+			if sufFuzzy {
+				argBuilder.WriteString("%")
+			}
+			arg = argBuilder.String()
+		} else {
+			sqlBuilder.WriteString("=")
+			sqlBuilder.WriteString(ps)
+		}
+		args = append(args, arg)
+	}
+	return sqlBuilder.String(), args, nil
+}
+
+func (s *commonSqlFunc) setl(val reflect.Value, action []string, value string) (string, []any, error) {
+	sql, args, err := s.set(val, action, value)
+	if len(args) > 0 {
+		sql = fmt.Sprintf(",%s", sql)
+	}
+	return sql, args, err
+}
+func (s *commonSqlFunc) setr(val reflect.Value, action []string, value string) (string, []any, error) {
+	sql, args, err := s.set(val, action, value)
+	if len(args) > 0 {
+		sql = fmt.Sprintf("%s,", sql)
+	}
+	return sql, args, err
 }

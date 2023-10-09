@@ -2,15 +2,56 @@ package scanner
 
 import (
 	"database/sql"
+	"encoding/json"
 	"reflect"
 	"time"
 	"unsafe"
 )
 
+//go:linkname convertAssign database/sql.convertAssign
+func convertAssign(dest, src any) error
+
+func notBasicType(field reflect.Type) bool {
+	if field.Kind() == reflect.Pointer {
+		field = field.Elem()
+	}
+	if field.Kind() == reflect.Struct || field.Kind() == reflect.Slice || field.Kind() == reflect.Map {
+		return true
+	} else {
+		return false
+	}
+}
+func jsonConvertStruct(field reflect.Value, src any) error {
+	if src == nil {
+		return nil
+	}
+	if field.Kind() == reflect.Pointer {
+		if field.IsNil() {
+			field.Set(reflect.New(field.Type().Elem()))
+		}
+		field = field.Elem()
+	}
+	if field.Kind() == reflect.Slice {
+		if field.IsNil() {
+			field.Set(reflect.MakeSlice(field.Type(), 0, 10))
+		}
+	}
+	if field.Kind() == reflect.Map {
+		if field.IsNil() {
+			field.Set(reflect.MakeMap(field.Type()))
+		}
+	}
+	if field.Kind() == reflect.Struct || field.Kind() == reflect.Slice || field.Kind() == reflect.Map {
+		return json.Unmarshal(src.([]byte), field.Addr().Interface())
+	} else {
+		return convertAssign(field.Addr().Interface(), src)
+	}
+}
+
 type StructScanner struct {
-	Dest    reflect.Value
-	Convert func(field reflect.Value, v any) error
-	Index   []int
+	Dest         reflect.Value
+	Index        []int
+	SetParameter func(src any) (any, error)
 }
 
 func (s *StructScanner) Scan(src any) error {
@@ -21,10 +62,49 @@ func (s *StructScanner) Scan(src any) error {
 	if !fv.CanSet() {
 		fv = reflect.NewAt(fv.Type(), unsafe.Pointer(fv.UnsafeAddr())).Elem()
 	}
-	if s.Convert != nil {
-		return s.Convert(fv, src)
+	if notBasicType(fv.Type()) {
+		if s.SetParameter != nil {
+			dest, err := s.SetParameter(src)
+			if err != nil {
+				return err
+			}
+			fv.Set(reflect.ValueOf(dest))
+			return nil
+		} else {
+			if _, ok := src.(time.Time); !ok {
+				return jsonConvertStruct(fv, src)
+			}
+		}
 	}
-	return ConvertAssign(fv.Addr().Interface(), src)
+	return convertAssign(fv.Addr().Interface(), src)
+}
+
+type ParameterScanner struct {
+	Dest         reflect.Value
+	Column       *sql.ColumnType
+	SetParameter func(src any) (any, error)
+}
+
+func (s *ParameterScanner) Scan(src any) error {
+	if src == nil {
+		return nil
+	} else {
+		if notBasicType(s.Dest.Type()) {
+			if s.SetParameter != nil {
+				dest, err := s.SetParameter(src)
+				if err != nil {
+					return err
+				}
+				s.Dest.Set(reflect.ValueOf(dest))
+				return nil
+			} else {
+				if _, ok := src.(time.Time); !ok {
+					return jsonConvertStruct(s.Dest, src)
+				}
+			}
+		}
+		return convertAssign(s.Dest.Addr().Interface(), src)
+	}
 }
 
 type MapScanner struct {
@@ -100,24 +180,6 @@ func (s *SliceScanner) Scan(src any) error {
 			}
 		}
 		return nil
-	}
-}
-
-type ParameterScanner struct {
-	Dest    reflect.Value
-	Column  *sql.ColumnType
-	Convert func(field reflect.Value, v any) error
-}
-
-func (s *ParameterScanner) Scan(src any) error {
-	if src == nil {
-		return nil
-	} else {
-		s.Dest.Set(reflect.New(s.Dest.Type()).Elem())
-		if s.Convert != nil {
-			return s.Convert(s.Dest, src)
-		}
-		return ConvertAssign(s.Dest.Addr().Interface(), src)
 	}
 }
 
