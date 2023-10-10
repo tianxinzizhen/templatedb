@@ -94,7 +94,6 @@ func NewDBFuncTemplateDB(sqlDB *sql.DB) *DBFuncTemplateDB {
 	for k, v := range sqlFunc {
 		tdb.sqlFunc[k] = v
 	}
-	tdb.logFunc = LogPrintf
 	return tdb
 }
 
@@ -127,15 +126,7 @@ func (tdb *DBFuncTemplateDB) templateBuild(templateSql *template.Template, op *f
 		}
 		op.args = nil
 	}
-	if tdb.sqlDebug && tdb.logFunc != nil {
-		interpolateParamsSql, err := SqlInterpolateParams(op.sql, op.args)
-		ctx := context.WithValue(op.ctx, keyLogSqlFuncName{}, templateSql.Name())
-		if err != nil {
-			tdb.logFunc(ctx, fmt.Sprintf("sql not print by error[%v]", err))
-		} else {
-			tdb.logFunc(ctx, interpolateParamsSql)
-		}
-	}
+	tdb.sqlPrintAndRecord(op.ctx, templateSql.Name(), op.sql, op.args)
 	return err
 }
 
@@ -330,14 +321,27 @@ func (tdb *DBFuncTemplateDB) sqlTemplateBuild(ctx context.Context, tsql string, 
 	if err != nil {
 		return "", nil, err
 	}
-	if tdb.sqlDebug && tdb.logFunc != nil {
+	tdb.sqlPrintAndRecord(ctx, fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line), sql, args)
+	return sql, args, err
+}
+
+func (tdb *DBFuncTemplateDB) sqlPrintAndRecord(ctx context.Context, sqlFuncName, sql string, args []any) {
+	needPrintSql := (tdb.sqlDebug && tdb.logFunc != nil)
+	recordSql, recordSqlOk := tdb.FromRecordSql(ctx)
+	if needPrintSql || recordSqlOk {
 		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
-		ctx := context.WithValue(ctx, keyLogSqlFuncName{}, fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line))
-		if err != nil {
-			tdb.logFunc(ctx, fmt.Sprintf("sql not print by error[%v]", err))
-		} else {
-			tdb.logFunc(ctx, interpolateParamsSql)
+		if needPrintSql {
+			ctx := context.WithValue(ctx, keyLogSqlFuncName{}, sqlFuncName)
+			if err != nil {
+				tdb.logFunc(ctx, fmt.Sprintf("sql not print by error[%v]", err))
+			} else {
+				tdb.logFunc(ctx, interpolateParamsSql)
+			}
+		}
+		if recordSqlOk {
+			if err == nil {
+				recordSql.Sql = append(recordSql.Sql, interpolateParamsSql)
+			}
 		}
 	}
-	return sql, args, err
 }

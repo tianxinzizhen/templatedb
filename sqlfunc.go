@@ -195,15 +195,6 @@ func AddTemplateFunc(key string, funcMethod any) error {
 	return nil
 }
 
-type TemplateDBContextType int
-
-const (
-	TemplateDBKeyString TemplateDBContextType = iota
-	TemplateDBFuncName
-)
-
-var LogPrintf func(ctx context.Context, info string)
-
 var MaxStackLen = 50
 
 type sqlDB interface {
@@ -217,6 +208,9 @@ type commonSqlFunc struct {
 
 func GetCommonSqlFunc(getFieldByName func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)) template.FuncMap {
 	cf := &commonSqlFunc{getFieldByName: getFieldByName}
+	if cf.getFieldByName == nil {
+		cf.getFieldByName = DefaultGetFieldByName
+	}
 	sqlFunc = make(template.FuncMap)
 	sqlFunc["in"] = cf.inParam
 	sqlFunc["value"] = cf.value
