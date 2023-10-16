@@ -211,28 +211,30 @@ func notBasicType(field reflect.Type) bool {
 
 func (t *Template) GetParameter(arg any) (string, any, error) {
 	ps := "?"
-	if t.getParameterMap != nil {
-		if fn, ok := t.getParameterMap[reflect.TypeOf(arg)]; ok {
-			var err error
-			ps, arg, err = fn(arg)
+	if arg != nil {
+		if t.getParameterMap != nil {
+			if fn, ok := t.getParameterMap[reflect.TypeOf(arg)]; ok {
+				var err error
+				ps, arg, err = fn(arg)
+				if err != nil {
+					return "", nil, err
+				}
+			}
+		}
+		at := reflect.TypeOf(arg)
+		switch at.Kind() {
+		case reflect.Slice, reflect.Pointer, reflect.Map, reflect.Interface:
+			if reflect.ValueOf(arg).IsNil() {
+				return ps, nil, nil
+			}
+		}
+		if notBasicType(at) {
+			argJson, err := json.Marshal(arg)
 			if err != nil {
 				return "", nil, err
 			}
+			arg = string(argJson)
 		}
-	}
-	at := reflect.TypeOf(arg)
-	switch at.Kind() {
-	case reflect.Slice, reflect.Pointer, reflect.Map, reflect.Interface:
-		if reflect.ValueOf(arg).IsNil() {
-			return ps, nil, nil
-		}
-	}
-	if notBasicType(at) {
-		argJson, err := json.Marshal(arg)
-		if err != nil {
-			return "", nil, err
-		}
-		arg = string(argJson)
 	}
 	return ps, arg, nil
 }
