@@ -211,15 +211,15 @@ func GetCommonSqlFunc(getFieldByName func(t reflect.Type, fieldName string, scan
 	if cf.getFieldByName == nil {
 		cf.getFieldByName = DefaultGetFieldByName
 	}
-	sqlFunc = make(template.FuncMap)
-	sqlFunc["in"] = cf.inParam
-	sqlFunc["value"] = cf.value
-	sqlFunc["values"] = cf.values
-	sqlFunc["set"] = cf.set
-	sqlFunc["setl"] = cf.setl
-	sqlFunc["setr"] = cf.setr
-	sqlFunc["if_and"] = cf.if_and
-	return sqlFunc
+	sqlCommonFunc := make(template.FuncMap)
+	sqlCommonFunc["in"] = cf.inParam
+	sqlCommonFunc["value"] = cf.value
+	sqlCommonFunc["values"] = cf.values
+	sqlCommonFunc["set"] = cf.set
+	sqlCommonFunc["setl"] = cf.setl
+	sqlCommonFunc["setr"] = cf.setr
+	sqlCommonFunc["if_and"] = cf.if_and
+	return sqlCommonFunc
 }
 func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
 	for ; v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface; v = v.Elem() {
