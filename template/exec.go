@@ -358,7 +358,7 @@ func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
 			s.wr.Write([]byte(ps))
 			s.args = append(s.args, arg)
 		} else {
-			panic(fmt.Errorf("the sql parameter[%d] is missing", s.qi))
+			panic(fmt.Errorf("the sql parameter[%d] is missing:%s", s.qi, node.Text))
 		}
 	}
 }

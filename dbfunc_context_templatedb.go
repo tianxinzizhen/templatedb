@@ -276,6 +276,22 @@ func (tdb *DBFuncTemplateDB) AutoCommit(ctx context.Context, err *error) {
 	}
 }
 
+func (tdb *DBFuncTemplateDB) Rollback(ctx context.Context) error {
+	tx, ok := FromSqlTx(ctx)
+	if ok {
+		return tx.Rollback()
+	}
+	return nil
+}
+
+func (tdb *DBFuncTemplateDB) Commit(ctx context.Context) error {
+	tx, ok := FromSqlTx(ctx)
+	if ok {
+		return tx.Commit()
+	}
+	return nil
+}
+
 func (tdb *DBFuncTemplateDB) Recover(ctx context.Context, err *error) {
 	if err == nil {
 		panic(errors.New("Recover in(1) err pointer is nil"))
