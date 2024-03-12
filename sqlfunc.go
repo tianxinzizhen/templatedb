@@ -401,10 +401,14 @@ func (s *commonSqlFunc) values(sVal reflect.Value, value string) (string, []any,
 							return "", nil, err
 						}
 						args = append(args, field.Interface())
+					} else {
+						return "", nil, fmt.Errorf("column:%s in struct %v not found", column, val.Type().Name())
 					}
 				case reflect.Map:
 					if val.Type().Key().Kind() == reflect.String {
 						args = append(args, val.MapIndex(reflect.ValueOf(column)).Interface())
+					} else {
+						return "", nil, fmt.Errorf("column:%s in map key is not string", column)
 					}
 				}
 				sqlBuilder.WriteString(ps)
@@ -470,11 +474,6 @@ func (s *commonSqlFunc) if_and(val reflect.Value, value string) (string, []any, 
 	var args []any
 	for _, column := range values {
 		column = strings.TrimSpace(column)
-		var asName = ""
-		if before, after, found := strings.Cut(column, "."); found {
-			asName = fmt.Sprintf("%s.", before)
-			column = after
-		}
 		var preFuzzy, sufFuzzy bool
 		if strings.HasPrefix(column, "%") {
 			preFuzzy = true
@@ -484,11 +483,15 @@ func (s *commonSqlFunc) if_and(val reflect.Value, value string) (string, []any, 
 			sufFuzzy = true
 			column = strings.TrimSuffix(column, "%")
 		}
+		var fieldByName string = column
+		if _, after, found := strings.Cut(column, "."); found {
+			fieldByName = after
+		}
 		ps := "?"
 		var arg any
 		switch val.Kind() {
 		case reflect.Struct:
-			tField, ok := s.getFieldByName(val.Type(), column, nil)
+			tField, ok := s.getFieldByName(val.Type(), fieldByName, nil)
 			if ok {
 				field, err := val.FieldByIndexErr(tField.Index)
 				if err != nil {
@@ -503,7 +506,7 @@ func (s *commonSqlFunc) if_and(val reflect.Value, value string) (string, []any, 
 			}
 		case reflect.Map:
 			if val.Type().Key().Kind() == reflect.String {
-				arg = val.MapIndex(reflect.ValueOf(column)).Interface()
+				arg = val.MapIndex(reflect.ValueOf(fieldByName)).Interface()
 				if truth, _ := template.IsTrue(arg); !truth {
 					continue
 				}
@@ -512,7 +515,6 @@ func (s *commonSqlFunc) if_and(val reflect.Value, value string) (string, []any, 
 			}
 		}
 		sqlBuilder.WriteString(" and ")
-		sqlBuilder.WriteString(asName)
 		sqlBuilder.WriteString(column)
 		if preFuzzy || sufFuzzy {
 			sqlBuilder.WriteString(" like ")
