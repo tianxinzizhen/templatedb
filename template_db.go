@@ -77,6 +77,9 @@ type TemplateDb struct {
 
 func NewTemplateDb(ops ...Option) *TemplateDb {
 	td := &TemplateDb{}
+	// default set global value
+	WithScanValue(scanValue)
+	WithSetValue(setValue)
 	for _, op := range ops {
 		op(td)
 	}
