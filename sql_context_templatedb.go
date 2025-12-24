@@ -2,6 +2,7 @@ package templatedb
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
 )
 
@@ -39,7 +40,7 @@ func (st SqlTemplate[T]) Query(tdb *DBFuncTemplateDB) (T, error) {
 	return op.result[0].Interface().(T), nil
 }
 
-func (st SqlTemplate[T]) Exec(tdb *DBFuncTemplateDB) (*Result, error) {
+func (st SqlTemplate[T]) Exec(tdb *DBFuncTemplateDB) (sql.Result, error) {
 	op := &funcExecOption{}
 	op.ctx = st.Ctx
 	op.sql = st.Sql

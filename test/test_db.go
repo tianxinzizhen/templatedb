@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 
 	"github.com/tianxinzizhen/templatedb"
@@ -52,7 +53,7 @@ type TestDB struct {
 	/*sql
 	insert into test values(@id,@name)
 	*/
-	Insert func(ctx context.Context, testInfo *Test) (*templatedb.Result, error)
+	Insert func(ctx context.Context, testInfo *Test) (*sql.Result, error)
 
 	/*sql
 	insert into test values(@id,@name)
@@ -65,7 +66,7 @@ type TestDB struct {
 	set name=?
 	where id=?
 	*/
-	Update func(ctx context.Context, testInfo *Test) (*templatedb.Result, error)
+	Update func(ctx context.Context, testInfo *Test) (*sql.Result, error)
 
 	/*sql
 	update test

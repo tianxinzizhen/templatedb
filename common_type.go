@@ -2,13 +2,14 @@ package templatedb
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
 )
 
 var (
-	contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType   = reflect.TypeOf((*error)(nil)).Elem()
-	ResultType  = reflect.TypeOf((*Result)(nil))
+	contextType   = reflect.TypeOf((*context.Context)(nil)).Elem()
+	errorType     = reflect.TypeOf((*error)(nil)).Elem()
+	sqlResultType = reflect.TypeOf((*sql.Result)(nil)).Elem()
 )
 
 type Operation int
@@ -27,8 +28,3 @@ const (
 	LoadXML LoadType = iota
 	LoadComment
 )
-
-type Result struct {
-	LastInsertId int64
-	RowsAffected int64
-}

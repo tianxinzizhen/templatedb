@@ -167,7 +167,7 @@ func (tdb *DBFuncTemplateDB) query(db sqlDB, op *funcExecOption) error {
 	return nil
 }
 
-func (tdb *DBFuncTemplateDB) exec(db sqlDB, op *funcExecOption) (ret *Result, err error) {
+func (tdb *DBFuncTemplateDB) exec(db sqlDB, op *funcExecOption) (ret sql.Result, err error) {
 	if op.ctx == nil {
 		op.ctx = context.Background()
 	}
@@ -175,15 +175,7 @@ func (tdb *DBFuncTemplateDB) exec(db sqlDB, op *funcExecOption) (ret *Result, er
 	if err != nil {
 		return nil, err
 	}
-	lastInsertId, err := result.LastInsertId()
-	if err != nil {
-		return &Result{}, nil
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return &Result{}, nil
-	}
-	return &Result{lastInsertId, rowsAffected}, nil
+	return result, nil
 }
 
 type recoverPanic struct{}
@@ -347,7 +339,7 @@ func (tdb *DBFuncTemplateDB) sqlPrintAndRecord(ctx context.Context, sqlFuncName,
 	if needPrintSql || recordSqlOk {
 		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
 		if needPrintSql {
-			ctx := context.WithValue(ctx, keyLogSqlFuncName{}, sqlFuncName)
+			ctx = context.WithValue(ctx, keyLogSqlFuncName{}, sqlFuncName)
 			if err != nil {
 				tdb.logFunc(ctx, fmt.Sprintf("sql not print by error[%v]", err))
 			} else {

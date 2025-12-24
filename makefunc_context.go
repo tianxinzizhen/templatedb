@@ -143,14 +143,12 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		}
 		switch action {
 		case ExecAction:
-			var ret *Result
+			var ret sql.Result
 			ret, err = tdb.exec(db, op)
 			if ret != nil {
 				result := reflect.ValueOf(ret)
-				if t.Out(0).Kind() == reflect.Pointer {
+				if t.Out(0).Kind() == reflect.Interface {
 					results[0] = result
-				} else {
-					results[0] = result.Elem()
 				}
 			}
 		case SelectAction:
@@ -251,7 +249,7 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 				}
 				var action Operation = ExecNoResultAction
 				if fct.NumOut() > 0 {
-					if fct.Out(0) == ResultType || fct.Out(0) == ResultType.Elem() {
+					if fct.Out(0) == sqlResultType || fct.Out(0) == sqlResultType.Elem() {
 						action = ExecAction
 					} else if !fct.Out(0).Implements(errorType) {
 						action = SelectAction
