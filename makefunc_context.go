@@ -225,11 +225,9 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 					if ditIni.Kind() == reflect.Pointer {
 						ditIni = ditIni.Elem()
 					}
-					if ditIni.Kind() == reflect.Func {
-						return fmt.Errorf("DBFuncContextInit in(%d) type not support Func", i)
-					}
-					if ditIni.Kind() == reflect.Chan {
-						return fmt.Errorf("DBFuncContextInit in(%d) type not support Chan", i)
+					switch ditIni.Kind() {
+					case reflect.Func, reflect.Chan:
+						return fmt.Errorf("DBFuncContextInit in(%d) type not support %s", i, ditIni.Kind().String())
 					}
 				}
 				for i := 0; i < fct.NumOut(); i++ {
@@ -237,14 +235,13 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 					if ditIni.Implements(errorType) {
 						continue
 					}
-					if ditIni.Kind() == reflect.Func {
-						return fmt.Errorf("DBFuncContextInit out(%d) type not support Func", i)
-					}
-					if ditIni.Kind() == reflect.Chan {
-						return fmt.Errorf("DBFuncContextInit out(%d) type not support Chan", i)
-					}
-					if ditIni.Kind() == reflect.Interface {
-						return fmt.Errorf("DBFuncContextInit out(%d) type not support Interface", i)
+					switch ditIni.Kind() {
+					case reflect.Func, reflect.Chan:
+						return fmt.Errorf("DBFuncContextInit out(%d) type not support %s", i, ditIni.Kind().String())
+					case reflect.Interface:
+						if !ditIni.Implements(sqlResultType) {
+							return fmt.Errorf("DBFuncContextInit out(%d) type not support Interface", i)
+						}
 					}
 				}
 				var action Operation = ExecNoResultAction
