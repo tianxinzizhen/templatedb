@@ -48,10 +48,24 @@ func jsonConvertStruct(field reflect.Value, src any) error {
 	}
 }
 
+type Scanner interface {
+	GetDest() reflect.Value
+	SetDest(dest reflect.Value)
+	Scan(src any) error
+}
+
 type StructScanner struct {
 	Dest         reflect.Value
 	Index        []int
 	SetParameter func(src any) (any, error)
+}
+
+func (s *StructScanner) GetDest() reflect.Value {
+	return s.Dest
+}
+
+func (s *StructScanner) SetDest(dest reflect.Value) {
+	s.Dest = dest
 }
 
 func (s *StructScanner) Scan(src any) error {
@@ -85,6 +99,14 @@ type ParameterScanner struct {
 	SetParameter func(src any) (any, error)
 }
 
+func (s *ParameterScanner) GetDest() reflect.Value {
+	return s.Dest
+}
+
+func (s *ParameterScanner) SetDest(dest reflect.Value) {
+	s.Dest = dest
+}
+
 func (s *ParameterScanner) Scan(src any) error {
 	if src == nil {
 		return nil
@@ -111,6 +133,14 @@ type MapScanner struct {
 	Dest   reflect.Value
 	Column *sql.ColumnType
 	Name   string
+}
+
+func (s *MapScanner) GetDest() reflect.Value {
+	return s.Dest
+}
+
+func (s *MapScanner) SetDest(dest reflect.Value) {
+	s.Dest = dest
 }
 
 func (s *MapScanner) Scan(src any) error {
@@ -149,6 +179,14 @@ type SliceScanner struct {
 	Dest   reflect.Value
 	Column *sql.ColumnType
 	Index  int
+}
+
+func (s *SliceScanner) GetDest() reflect.Value {
+	return s.Dest
+}
+
+func (s *SliceScanner) SetDest(dest reflect.Value) {
+	s.Dest = dest
 }
 
 func (s *SliceScanner) Scan(src any) error {

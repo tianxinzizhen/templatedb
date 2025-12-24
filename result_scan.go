@@ -16,8 +16,7 @@ func getTempScanDest(scanType reflect.Type) any {
 		tempScanDest = make(map[reflect.Type]any)
 	}
 	if dest, ok := tempScanDest[scanType]; !ok {
-		dest := reflect.New(scanType).Interface()
-		tempScanDest[scanType] = dest
+		tempScanDest[scanType] = reflect.New(scanType).Interface()
 		return dest
 	} else {
 		return dest
@@ -30,15 +29,20 @@ func (tdb *DBFuncTemplateDB) newScanDestByValues(columns []*sql.ColumnType, ret 
 	destSlice = make([]any, 0, len(columns))
 	if len(ret) == 1 {
 		t := ret[0].Type()
-		if t.Kind() == reflect.Array || t.Kind() == reflect.Slice {
-			if t.Kind() == reflect.Array {
-				arrayLen = t.Len()
-			}
-			t = t.Elem()
+		switch t.Kind() {
+		case reflect.Array:
+			arrayLen = t.Len()
+			more = true
+		case reflect.Slice:
 			more = true
 		}
 		for t.Kind() == reflect.Pointer {
 			t = t.Elem()
+			switch t.Kind() {
+			case reflect.Array, reflect.Slice:
+				err = fmt.Errorf("scan array or slice type not support")
+				return
+			}
 		}
 		if _, ok := tdb.getParameterMap[t]; t.Kind() == reflect.Struct && !ok {
 			scanMapIndex := make(map[string]int)
@@ -100,37 +104,21 @@ func (tdb *DBFuncTemplateDB) nextNewScanDest(ret []reflect.Value, scanRows []any
 			rv.Set(reflect.New(rt))
 			rv = rv.Elem()
 		}
-		if _, ok := tdb.getParameterMap[rt]; rt.Kind() == reflect.Struct && !ok {
-			for _, v := range scanRows {
-				if vi, ok := v.(*scanner.StructScanner); ok {
-					vi.Dest = rv
-				}
-			}
-		} else if rt.Kind() == reflect.Map && rt.Key().Kind() == reflect.String {
-			rv.Set(reflect.MakeMapWithSize(reflect.MapOf(rt.Key(), rt.Elem()), len(scanRows)))
-			for _, v := range scanRows {
-				if vi, ok := v.(*scanner.MapScanner); ok {
-					vi.Dest = rv
-				}
-			}
-		} else if rt.Kind() == reflect.Slice {
+		switch rt.Kind() {
+		case reflect.Slice:
 			rv.Set(reflect.MakeSlice(reflect.SliceOf(rt.Elem()), len(scanRows), len(scanRows)))
-			for _, v := range scanRows {
-				if vi, ok := v.(*scanner.SliceScanner); ok {
-					vi.Dest = rv
-				}
-			}
-		} else {
-			for _, v := range scanRows {
-				if vi, ok := v.(*scanner.ParameterScanner); ok {
-					vi.Dest = rv
-				}
+		case reflect.Map:
+			rv.Set(reflect.MakeMap(reflect.MapOf(rt.Key(), rt.Elem())))
+		}
+		for _, v := range scanRows {
+			if vi, ok := v.(scanner.Scanner); ok {
+				vi.SetDest(rv)
 			}
 		}
 	} else {
 		for i, v := range scanRows {
-			if vi, ok := v.(*scanner.ParameterScanner); ok {
-				vi.Dest = reflect.New(ret[i].Type()).Elem()
+			if vi, ok := v.(scanner.Scanner); ok {
+				vi.SetDest(reflect.New(ret[i].Type()).Elem())
 			}
 		}
 	}
@@ -140,27 +128,14 @@ func nextSetResult(ret []reflect.Value, rowi int, scanRows []any) {
 	if len(ret) == 1 {
 		rt := ret[0].Type()
 		var more bool
-		var isArray = rt.Kind() == reflect.Array
-		var isSlice = rt.Kind() == reflect.Slice
-		if isArray || isSlice {
+		switch rt.Kind() {
+		case reflect.Array, reflect.Slice:
 			more = true
 		}
 		var rv reflect.Value
 		for _, v := range scanRows {
-			if vi, ok := v.(*scanner.StructScanner); ok {
-				rv = vi.Dest
-				break
-			}
-			if vi, ok := v.(*scanner.MapScanner); ok {
-				rv = vi.Dest
-				break
-			}
-			if vi, ok := v.(*scanner.SliceScanner); ok {
-				rv = vi.Dest
-				break
-			}
-			if vi, ok := v.(*scanner.ParameterScanner); ok {
-				rv = vi.Dest
+			if vi, ok := v.(scanner.Scanner); ok {
+				rv = vi.GetDest()
 				break
 			}
 		}
@@ -174,7 +149,7 @@ func nextSetResult(ret []reflect.Value, rowi int, scanRows []any) {
 				rt = rt.Elem()
 				mv = rv.Addr()
 			}
-			if isArray {
+			if rt.Kind() == reflect.Array {
 				if ret[0].IsZero() {
 					ret[0] = reflect.New(ret[0].Type()).Elem()
 				}
@@ -192,8 +167,8 @@ func nextSetResult(ret []reflect.Value, rowi int, scanRows []any) {
 		}
 	} else {
 		for i, v := range scanRows {
-			if vi, ok := v.(*scanner.ParameterScanner); ok {
-				ret[i] = vi.Dest
+			if vi, ok := v.(scanner.Scanner); ok {
+				ret[i] = vi.GetDest()
 			}
 		}
 	}
