@@ -5,15 +5,18 @@
 package template
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
-	"time"
 
 	"github.com/tianxinzizhen/templatedb/template/parse"
+
+	"github.com/tianxinzizhen/templatedb/sqlwrite"
 )
 
 // maxExecDepth specifies the maximum stack depth of templates within
@@ -21,9 +24,6 @@ import (
 // recursive template invocations. This limit allows us to return
 // an error instead of triggering a stack overflow.
 var maxExecDepth = initMaxExecDepth()
-
-// prevent SQL escape
-var SqlEscape func(arg any) (sql string, err error)
 
 func initMaxExecDepth() int {
 	if runtime.GOARCH == "wasm" {
@@ -36,15 +36,11 @@ func initMaxExecDepth() int {
 // template so that multiple executions of the same template
 // can execute in parallel.
 type state struct {
-	tmpl     *Template
-	wr       io.Writer
-	node     parse.Node // current node, for errors
-	vars     []variable // push-down stack of variable values.
-	depth    int        // the height of the stack of executing templates.
-	args     []any      // sql参数列表
-	qi       int
-	qArgs    []any
-	pv_index map[string]any
+	tmpl  *Template
+	wr    io.Writer
+	node  parse.Node // current node, for errors
+	vars  []variable // push-down stack of variable values.
+	depth int        // the height of the stack of executing templates.
 }
 
 // variable holds the dynamic value of a variable such as $, $x etc.
@@ -101,6 +97,12 @@ var zero reflect.Value
 type missingValType struct{}
 
 var missingVal = reflect.ValueOf(missingValType{})
+
+var missingValReflectType = reflect.TypeFor[missingValType]()
+
+func isMissing(v reflect.Value) bool {
+	return v.IsValid() && v.Type() == missingValReflectType
+}
 
 // at marks the state to be on node n, for error reporting.
 func (s *state) at(node parse.Node) {
@@ -187,12 +189,12 @@ func errRecover(errp *error) {
 // the output writer.
 // A template may be executed safely in parallel, although if parallel
 // executions share a Writer the output may be interleaved.
-func (t *Template) ExecuteTemplate(wr io.Writer, name string, data any) ([]any, error) {
+func (t *Template) ExecuteTemplate(wr io.Writer, name string, data any) error {
 	tmpl := t.Lookup(name)
 	if tmpl == nil {
-		return nil, fmt.Errorf("template: no template %q associated with template %q", name, t.name)
+		return fmt.Errorf("template: no template %q associated with template %q", name, t.name)
 	}
-	return tmpl.Execute(wr, data, nil)
+	return tmpl.Execute(wr, data)
 }
 
 // Execute applies a parsed template to the specified data object,
@@ -203,53 +205,34 @@ func (t *Template) ExecuteTemplate(wr io.Writer, name string, data any) ([]any, 
 // A template may be executed safely in parallel, although if parallel
 // executions share a Writer the output may be interleaved.
 //
-// If data is a reflect.Value, the template applies to the concrete
-// value that the reflect.Value holds, as in fmt.Print.
-func (t *Template) Execute(wr io.Writer, data any, qArgs []any) ([]any, error) {
-	return t.execute(wr, data, qArgs, nil)
+// If data is a [reflect.Value], the template applies to the concrete
+// value that the reflect.Value holds, as in [fmt.Print].
+func (t *Template) Execute(wr io.Writer, data any) error {
+	return t.execute(wr, data)
 }
 
-func (t *Template) ExecuteBuilder(data any, qArgs []any, pv_index []any) (string, []any, error) {
-	builder := &strings.Builder{}
-	args, err := t.execute(builder, data, qArgs, pv_index)
-	if err != nil {
-		return "", nil, err
-	}
-	return builder.String(), args, nil
-}
-
-func (t *Template) execute(wr io.Writer, data any, qArgs []any, pv_index []any) (args []any, err error) {
+func (t *Template) execute(wr io.Writer, data any) (err error) {
 	defer errRecover(&err)
 	value, ok := data.(reflect.Value)
 	if !ok {
 		value = reflect.ValueOf(data)
 	}
 	state := &state{
-		tmpl:  t,
-		wr:    wr,
-		vars:  []variable{{"$", value}},
-		qArgs: qArgs,
-	}
-	if len(t.Param) > 0 {
-		state.pv_index = make(map[string]any)
-		for i, v := range pv_index {
-			if i < len(t.Param) {
-				state.pv_index[t.Param[i]] = v
-			}
-		}
+		tmpl: t,
+		wr:   wr,
+		vars: []variable{{"$", value}},
 	}
 	if t.Tree == nil || t.Root == nil {
 		state.errorf("%q is an incomplete or empty template", t.Name())
 	}
 	state.walk(value, t.Root)
-	args = state.args
 	return
 }
 
 // DefinedTemplates returns a string listing the defined templates,
 // prefixed by the string "; defined templates are: ". If there are none,
 // it returns the empty string. For generating an error message here
-// and in html/template.
+// and in [html/template].
 func (t *Template) DefinedTemplates() string {
 	if t.common == nil {
 		return ""
@@ -273,8 +256,8 @@ func (t *Template) DefinedTemplates() string {
 
 // Sentinel errors for use with panic to signal early exits from range loops.
 var (
-	ErrWalkBreak    = errors.New("break")
-	ErrWalkContinue = errors.New("continue")
+	walkBreak    = errors.New("break")
+	walkContinue = errors.New("continue")
 )
 
 // Walk functions step through the major pieces of the template structure,
@@ -289,15 +272,11 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 		if len(node.Pipe.Decl) == 0 {
 			s.printValue(node, val)
 		}
-	case *parse.AtSignNode:
-		s.evalAtSign(dot, node)
-	case *parse.SqlParamNode:
-		s.evalParam(dot, node)
 	case *parse.BreakNode:
-		panic(ErrWalkBreak)
+		panic(walkBreak)
 	case *parse.CommentNode:
 	case *parse.ContinueNode:
-		panic(ErrWalkContinue)
+		panic(walkContinue)
 	case *parse.IfNode:
 		s.walkIfOrWith(parse.NodeIf, dot, node.Pipe, node.List, node.ElseList)
 	case *parse.ListNode:
@@ -316,94 +295,6 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 		s.walkIfOrWith(parse.NodeWith, dot, node.Pipe, node.List, node.ElseList)
 	default:
 		s.errorf("unknown node: %s", node)
-	}
-}
-
-func (s *state) evalParam(val reflect.Value, node *parse.SqlParamNode) {
-	var ok bool
-	if node.Text != "?" {
-		val, ok = s.getField(val, node.Text)
-		if !ok && s.pv_index != nil {
-			var arg any
-			if arg, ok = s.pv_index[node.Text]; ok {
-				val = reflect.ValueOf(arg)
-			}
-		}
-	}
-	if ok {
-		var arg any
-		var ps = "?"
-		if val == zero {
-			arg = nil
-		} else {
-			var err error
-			ps, arg, err = s.tmpl.GetParameter(val.Interface())
-			if err != nil {
-				s.writeError(fmt.Errorf("evalParam output print:%s", err))
-			}
-		}
-		s.args = append(s.args, arg)
-		_, err := fmt.Fprint(s.wr, ps)
-		if err != nil {
-			s.writeError(fmt.Errorf("evalParam output print:%s", err))
-		}
-	} else {
-		if s.qi < len(s.qArgs) {
-			arg := s.qArgs[s.qi]
-			s.qi++ //param index next argument
-			ps, arg, err := s.tmpl.GetParameter(arg)
-			if err != nil {
-				s.writeError(fmt.Errorf("evalParam output print:%s", err))
-			}
-			s.wr.Write([]byte(ps))
-			s.args = append(s.args, arg)
-		} else {
-			panic(fmt.Errorf("the sql parameter[%d] is missing:%s", s.qi, node.Text))
-		}
-	}
-}
-
-func (s *state) evalAtSign(val reflect.Value, node *parse.AtSignNode) {
-	if node.Global && s.pv_index != nil {
-		val = reflect.ValueOf(s.pv_index)
-	}
-	fieldNames := strings.Split(node.Text, ".")
-	for _, fieldName := range fieldNames {
-		val = s.evalField(val, fieldName, node, nil, missingVal, val)
-		if val == zero {
-			break
-		}
-	}
-	var arg any
-	var ps = "?"
-	if val == zero {
-		arg = nil
-		val = reflect.ValueOf(arg)
-	} else {
-		var err error
-		ps, arg, err = s.tmpl.GetParameter(val.Interface())
-		if err != nil {
-			s.writeError(fmt.Errorf("evalAtSign output print:%s", err))
-		}
-	}
-	if node.SuffixQuestionMark {
-		truth, _ := isTrue(val)
-		if !truth {
-			arg = nil
-		}
-	}
-	if SqlEscape != nil && node.PrefixPoundSign {
-		sqlParam, err := SqlEscape(arg)
-		if err != nil {
-			s.writeError(fmt.Errorf("evalAtSign sql escape:%s", err))
-		}
-		ps = sqlParam
-	} else {
-		s.args = append(s.args, arg)
-	}
-	_, err := fmt.Fprint(s.wr, ps)
-	if err != nil {
-		s.writeError(fmt.Errorf("evalAtSign output print:%s", err))
 	}
 }
 
@@ -434,8 +325,6 @@ func IsTrue(val any) (truth, ok bool) {
 	return isTrue(reflect.ValueOf(val))
 }
 
-var invalidTime = time.Time{}
-
 func isTrue(val reflect.Value) (truth, ok bool) {
 	if !val.IsValid() {
 		// Something like var x interface{}, never set. It's a form of nil.
@@ -457,16 +346,7 @@ func isTrue(val reflect.Value) (truth, ok bool) {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		truth = val.Uint() != 0
 	case reflect.Struct:
-		if tv, ok := val.Interface().(time.Time); ok {
-			if tv == invalidTime || tv == invalidTime.Local() {
-				truth = false
-			} else {
-				truth = true
-			}
-		} else {
-			truth = true // Struct values are always true.
-		}
-
+		truth = true // Struct values are always true.
 	default:
 		return
 	}
@@ -476,7 +356,7 @@ func isTrue(val reflect.Value) (truth, ok bool) {
 func (s *state) walkRange(dot reflect.Value, r *parse.RangeNode) {
 	s.at(r)
 	defer func() {
-		if r := recover(); r != nil && r != ErrWalkBreak {
+		if r := recover(); r != nil && r != walkBreak {
 			panic(r)
 		}
 	}()
@@ -485,24 +365,56 @@ func (s *state) walkRange(dot reflect.Value, r *parse.RangeNode) {
 	// mark top of stack before any variables in the body are pushed.
 	mark := s.mark()
 	oneIteration := func(index, elem reflect.Value) {
-		// Set top var (lexically the second if there are two) to the element.
 		if len(r.Pipe.Decl) > 0 {
-			s.setTopVar(1, elem)
+			if r.Pipe.IsAssign {
+				// With two variables, index comes first.
+				// With one, we use the element.
+				if len(r.Pipe.Decl) > 1 {
+					s.setVar(r.Pipe.Decl[0].Ident[0], index)
+				} else {
+					s.setVar(r.Pipe.Decl[0].Ident[0], elem)
+				}
+			} else {
+				// Set top var (lexically the second if there
+				// are two) to the element.
+				s.setTopVar(1, elem)
+			}
 		}
-		// Set next var (lexically the first if there are two) to the index.
 		if len(r.Pipe.Decl) > 1 {
-			s.setTopVar(2, index)
+			if r.Pipe.IsAssign {
+				s.setVar(r.Pipe.Decl[1].Ident[0], elem)
+			} else {
+				// Set next var (lexically the first if there
+				// are two) to the index.
+				s.setTopVar(2, index)
+			}
 		}
 		defer s.pop(mark)
 		defer func() {
 			// Consume panic(walkContinue)
-			if r := recover(); r != nil && r != ErrWalkContinue {
+			if r := recover(); r != nil && r != walkContinue {
 				panic(r)
 			}
 		}()
 		s.walk(elem, r.List)
 	}
 	switch val.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		if len(r.Pipe.Decl) > 1 {
+			s.errorf("can't use %v to iterate over more than one variable", val)
+			break
+		}
+		run := false
+		for v := range val.Seq() {
+			run = true
+			// Pass element as second value, as we do for channels.
+			oneIteration(reflect.Value{}, v)
+		}
+		if !run {
+			break
+		}
+		return
 	case reflect.Array, reflect.Slice:
 		if val.Len() == 0 {
 			break
@@ -515,9 +427,17 @@ func (s *state) walkRange(dot reflect.Value, r *parse.RangeNode) {
 		if val.Len() == 0 {
 			break
 		}
-		om := Sort(val)
-		for i, key := range om.Key {
-			oneIteration(key, om.Value[i])
+		// om := fmtsort.Sort(val)
+		keys := make([]reflect.Value, 0, val.Len())
+		iter := val.MapRange()
+		for iter.Next() {
+			keys = append(keys, iter.Key())
+		}
+		slices.SortStableFunc(keys, func(a, b reflect.Value) int {
+			return compare(a, b)
+		})
+		for _, key := range keys {
+			oneIteration(key, val.MapIndex(key))
 		}
 		return
 	case reflect.Chan:
@@ -542,6 +462,43 @@ func (s *state) walkRange(dot reflect.Value, r *parse.RangeNode) {
 		return
 	case reflect.Invalid:
 		break // An invalid value is likely a nil map, etc. and acts like an empty map.
+	case reflect.Func:
+		if val.Type().CanSeq() {
+			if len(r.Pipe.Decl) > 1 {
+				s.errorf("can't use %v iterate over more than one variable", val)
+				break
+			}
+			run := false
+			for v := range val.Seq() {
+				run = true
+				// Pass element as second value,
+				// as we do for channels.
+				oneIteration(reflect.Value{}, v)
+			}
+			if !run {
+				break
+			}
+			return
+		}
+		if val.Type().CanSeq2() {
+			run := false
+			for i, v := range val.Seq2() {
+				run = true
+				if len(r.Pipe.Decl) > 1 {
+					oneIteration(i, v)
+				} else {
+					// If there is only one range variable,
+					// oneIteration will use the
+					// second value.
+					oneIteration(reflect.Value{}, i)
+				}
+			}
+			if !run {
+				break
+			}
+			return
+		}
+		fallthrough
 	default:
 		s.errorf("range can't iterate over %v", val)
 	}
@@ -587,7 +544,7 @@ func (s *state) evalPipeline(dot reflect.Value, pipe *parse.PipeNode) (value ref
 		value = s.evalCommand(dot, cmd, value) // previous value is this one's final arg.
 		// If the object has type interface{}, dig down one level to the thing inside.
 		if value.Kind() == reflect.Interface && value.Type().NumMethod() == 0 {
-			value = reflect.ValueOf(value.Interface()) // lovely!
+			value = value.Elem()
 		}
 	}
 	for _, variable := range pipe.Decl {
@@ -601,7 +558,7 @@ func (s *state) evalPipeline(dot reflect.Value, pipe *parse.PipeNode) (value ref
 }
 
 func (s *state) notAFunction(args []parse.Node, final reflect.Value) {
-	if len(args) > 1 || final != missingVal {
+	if len(args) > 1 || !isMissing(final) {
 		s.errorf("can't give argument to non-function %s", args[0])
 	}
 }
@@ -759,11 +716,15 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 	if method := ptr.MethodByName(fieldName); method.IsValid() {
 		return s.evalCall(dot, method, false, node, fieldName, args, final)
 	}
-	hasArgs := len(args) > 1 || final != missingVal
+	hasArgs := len(args) > 1 || !isMissing(final)
 	// It's not a method; must be a field of a struct or an element of a map.
 	switch receiver.Kind() {
 	case reflect.Struct:
-		tField, ok := s.tmpl.getFieldByName(receiver.Type(), fieldName, nil)
+		// If the template has a field name function, use it to transform the field name.
+		if s.tmpl.filedName != nil {
+			fieldName = s.tmpl.filedName(receiver.Type(), fieldName)
+		}
+		tField, ok := receiver.Type().FieldByName(fieldName)
 		if ok {
 			field, err := receiver.FieldByIndexErr(tField.Index)
 			if !tField.IsExported() {
@@ -786,6 +747,14 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 				s.errorf("%s is not a method but has arguments", fieldName)
 			}
 			result := receiver.MapIndex(nameVal)
+			// 再次尝试使用转换后的字段名
+			if !result.IsValid() {
+				if s.tmpl.filedName != nil {
+					fieldName = s.tmpl.filedName(receiver.Type(), fieldName)
+					nameVal = reflect.ValueOf(fieldName)
+				}
+				result = receiver.MapIndex(nameVal)
+			}
 			if !result.IsValid() {
 				switch s.tmpl.option.missingKey {
 				case mapInvalid:
@@ -801,6 +770,9 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 	case reflect.Pointer:
 		etyp := receiver.Type().Elem()
 		if etyp.Kind() == reflect.Struct {
+			if s.tmpl.filedName != nil {
+				fieldName = s.tmpl.filedName(etyp, fieldName)
+			}
 			if _, ok := etyp.FieldByName(fieldName); !ok {
 				// If there's no such field, say "can't evaluate"
 				// instead of "nil pointer evaluating".
@@ -815,55 +787,10 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 	panic("not reached")
 }
 
-func (s *state) getField(receiver reflect.Value, fieldName string) (val reflect.Value, ok bool) {
-	if !receiver.IsValid() {
-		return zero, false
-	}
-	receiver, isNil := indirect(receiver)
-	if receiver.Kind() == reflect.Interface && isNil {
-		return zero, false
-	}
-
-	// It's not a method; must be a field of a struct or an element of a map.
-	switch receiver.Kind() {
-	case reflect.Struct:
-		tField, ok := s.tmpl.getFieldByName(receiver.Type(), fieldName, nil)
-		if ok {
-			field, err := receiver.FieldByIndexErr(tField.Index)
-			if !tField.IsExported() {
-				return zero, false
-			}
-			if err != nil {
-				return zero, false
-			}
-			return field, true
-		}
-	case reflect.Map:
-		// If it's a map, attempt to use the field name as a key.
-		nameVal := reflect.ValueOf(fieldName)
-		if nameVal.Type().AssignableTo(receiver.Type().Key()) {
-			result := receiver.MapIndex(nameVal)
-			if !result.IsValid() {
-				switch s.tmpl.option.missingKey {
-				case mapInvalid:
-					// Just use the invalid value.
-				case mapZeroValue:
-					result = reflect.Zero(receiver.Type().Elem())
-				case mapError:
-					return zero, false
-				}
-			}
-			return result, true
-		}
-	}
-	return zero, false
-}
-
 var (
-	errorType        = reflect.TypeOf((*error)(nil)).Elem()
-	anySliceType     = reflect.TypeOf(([]any)(nil))
-	fmtStringerType  = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
-	reflectValueType = reflect.TypeOf((*reflect.Value)(nil)).Elem()
+	errorType        = reflect.TypeFor[error]()
+	fmtStringerType  = reflect.TypeFor[fmt.Stringer]()
+	reflectValueType = reflect.TypeFor[reflect.Value]()
 )
 
 // evalCall executes a function or method call. If it's a method, fun already has the receiver bound, so
@@ -875,7 +802,7 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 	}
 	typ := fun.Type()
 	numIn := len(args)
-	if final != missingVal {
+	if !isMissing(final) {
 		numIn++
 	}
 	numFixed := len(args)
@@ -887,9 +814,8 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 	} else if numIn != typ.NumIn() {
 		s.errorf("wrong number of args for %s: want %d got %d", name, typ.NumIn(), numIn)
 	}
-	if !goodFunc(typ) {
-		// TODO: This could still be a confusing error; maybe goodFunc should provide info.
-		s.errorf("can't call method/function %q with %d results", name, typ.NumOut())
+	if err := goodFunc(name, typ); err != nil {
+		s.errorf("%v", err)
 	}
 
 	unwrap := func(v reflect.Value) reflect.Value {
@@ -911,7 +837,7 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 				return v
 			}
 		}
-		if final != missingVal {
+		if !final.Equal(missingVal) {
 			// The last argument to and/or is coming from
 			// the pipeline. We didn't short circuit on an earlier
 			// argument, so we are going to return this one.
@@ -938,7 +864,7 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 		}
 	}
 	// Add final value if necessary.
-	if final != missingVal {
+	if !isMissing(final) {
 		t := typ.In(typ.NumIn() - 1)
 		if typ.IsVariadic() {
 			if numIn-1 < numFixed {
@@ -953,28 +879,27 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 		}
 		argv[i] = s.validateType(final, t)
 	}
-	v, params, err := safeCall(fun, argv)
+
+	// Special case for the "call" builtin.
+	// Insert the name of the callee function as the first argument.
+	if isBuiltin && name == "call" {
+		var calleeName string
+		if len(args) == 0 {
+			// final must be present or we would have errored out above.
+			calleeName = final.String()
+		} else {
+			calleeName = args[0].String()
+		}
+		argv = append([]reflect.Value{reflect.ValueOf(calleeName)}, argv...)
+		fun = reflect.ValueOf(call)
+	}
+
+	v, err := safeCall(fun, argv)
 	// If we have an error that is not nil, stop execution and return that
 	// error to the caller.
 	if err != nil {
 		s.at(node)
 		s.errorf("error calling %s: %w", name, err)
-	}
-	if params.IsValid() {
-		ps := strings.Split(v.String(), "?")
-		sb := &strings.Builder{}
-		sb.WriteString(ps[0])
-		resultArgs := params.Interface().([]any)
-		for i, v := range resultArgs {
-			pitem, arg, err := s.tmpl.GetParameter(v)
-			if err != nil {
-				s.writeError(fmt.Errorf("evalCall output print:%s", err))
-			}
-			s.args = append(s.args, arg)
-			sb.WriteString(pitem)
-			sb.WriteString(ps[i+1])
-		}
-		v = reflect.ValueOf(sb.String())
 	}
 	return unwrap(v)
 }
@@ -1206,6 +1131,12 @@ func (s *state) printValue(n parse.Node, v reflect.Value) {
 	if !ok {
 		s.errorf("can't print %s of type %s", n, v.Type())
 	}
+	// 针对sql值的特殊处理
+	if sqw, ok := s.wr.(*sqlwrite.SqlWrite); ok {
+		sqw.WriteString("?")
+		sqw.AddArgs(iface)
+		return
+	}
 	_, err := fmt.Fprint(s.wr, iface)
 	if err != nil {
 		s.writeError(err)
@@ -1233,4 +1164,82 @@ func printableValue(v reflect.Value) (any, bool) {
 		}
 	}
 	return v.Interface(), true
+}
+
+func compare(aVal, bVal reflect.Value) int {
+	aType, bType := aVal.Type(), bVal.Type()
+	if aType != bType {
+		return -1 // No good answer possible, but don't return 0: they're not equal.
+	}
+	switch aVal.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return cmp.Compare(aVal.Int(), bVal.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return cmp.Compare(aVal.Uint(), bVal.Uint())
+	case reflect.String:
+		return cmp.Compare(aVal.String(), bVal.String())
+	case reflect.Float32, reflect.Float64:
+		return cmp.Compare(aVal.Float(), bVal.Float())
+	case reflect.Complex64, reflect.Complex128:
+		a, b := aVal.Complex(), bVal.Complex()
+		if c := cmp.Compare(real(a), real(b)); c != 0 {
+			return c
+		}
+		return cmp.Compare(imag(a), imag(b))
+	case reflect.Bool:
+		a, b := aVal.Bool(), bVal.Bool()
+		switch {
+		case a == b:
+			return 0
+		case a:
+			return 1
+		default:
+			return -1
+		}
+	case reflect.Pointer, reflect.UnsafePointer:
+		return cmp.Compare(aVal.Pointer(), bVal.Pointer())
+	case reflect.Chan:
+		if c, ok := nilCompare(aVal, bVal); ok {
+			return c
+		}
+		return cmp.Compare(aVal.Pointer(), bVal.Pointer())
+	case reflect.Struct:
+		for i := 0; i < aVal.NumField(); i++ {
+			if c := compare(aVal.Field(i), bVal.Field(i)); c != 0 {
+				return c
+			}
+		}
+		return 0
+	case reflect.Array:
+		for i := 0; i < aVal.Len(); i++ {
+			if c := compare(aVal.Index(i), bVal.Index(i)); c != 0 {
+				return c
+			}
+		}
+		return 0
+	case reflect.Interface:
+		if c, ok := nilCompare(aVal, bVal); ok {
+			return c
+		}
+		c := compare(reflect.ValueOf(aVal.Elem().Type()), reflect.ValueOf(bVal.Elem().Type()))
+		if c != 0 {
+			return c
+		}
+		return compare(aVal.Elem(), bVal.Elem())
+	default:
+		// Certain types cannot appear as keys (maps, funcs, slices), but be explicit.
+		panic("bad type in compare: " + aType.String())
+	}
+}
+func nilCompare(aVal, bVal reflect.Value) (int, bool) {
+	if aVal.IsNil() {
+		if bVal.IsNil() {
+			return 0, true
+		}
+		return -1, true
+	}
+	if bVal.IsNil() {
+		return 1, true
+	}
+	return 0, false
 }

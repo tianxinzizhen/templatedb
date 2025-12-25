@@ -18,6 +18,7 @@ const (
 	ExecAction Operation = iota
 	PrepareAction
 	SelectAction
+	SelectOneAction
 	SelectScanAction
 	ExecNoResultAction
 )

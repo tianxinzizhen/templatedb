@@ -73,8 +73,6 @@ const (
 	NodeComment                    // A comment.
 	NodeBreak                      // A break action.
 	NodeContinue                   // A continue action.
-	NodeAtSign                     //用于sql参数解析
-	NodeSqlParam                   //用于sql参数解析
 )
 
 // Nodes.
@@ -154,82 +152,6 @@ func (t *TextNode) Copy() Node {
 	return &TextNode{tr: t.tr, NodeType: NodeText, Pos: t.Pos, Text: append([]byte{}, t.Text...)}
 }
 
-// AtSignNode holds plain text.
-type AtSignNode struct {
-	NodeType
-	Pos
-	tr                 *Tree
-	Text               string   // The text; may span newlines.
-	Vars               []string // variables defined at the moment.
-	PrefixPoundSign    bool     // is enable pound sign
-	SuffixQuestionMark bool     // is enable question mark
-	Global             bool     // is enable global
-}
-
-func (t *Tree) newAtSign(pos Pos, text string, vars []string) *AtSignNode {
-	fieldName := text
-	prefixPoundSign := false
-	suffixQuestionMark := false
-	global := false
-	if strings.HasPrefix(fieldName, t.lex.atSign) {
-		fieldName = strings.TrimPrefix(fieldName, t.lex.atSign)
-		global = true
-	}
-	if strings.HasPrefix(fieldName, "#") {
-		fieldName = strings.TrimPrefix(fieldName, "#")
-		prefixPoundSign = true
-	}
-	if strings.HasSuffix(fieldName, "?") {
-		fieldName = strings.TrimSuffix(fieldName, "?")
-		suffixQuestionMark = true
-	}
-	return &AtSignNode{tr: t, NodeType: NodeAtSign, Pos: pos, Text: fieldName, Vars: vars, PrefixPoundSign: prefixPoundSign, SuffixQuestionMark: suffixQuestionMark, Global: global}
-}
-
-func (t *AtSignNode) String() string {
-	return fmt.Sprintf("@%s", t.Text)
-}
-
-func (t *AtSignNode) writeTo(sb *strings.Builder) {
-	sb.WriteString(t.String())
-}
-
-func (t *AtSignNode) tree() *Tree {
-	return t.tr
-}
-
-func (t *AtSignNode) Copy() Node {
-	return &AtSignNode{tr: t.tr, NodeType: NodeSqlParam, Pos: t.Pos, Text: t.Text}
-}
-
-// AtSignNode holds plain text.
-type SqlParamNode struct {
-	NodeType
-	Pos
-	tr   *Tree
-	Text string // The text; may span newlines.
-}
-
-func (t *Tree) newSqlParamNode(pos Pos, val string) *SqlParamNode {
-	return &SqlParamNode{tr: t, NodeType: NodeSqlParam, Pos: pos, Text: val}
-}
-
-func (t *SqlParamNode) String() string {
-	return "?"
-}
-
-func (t *SqlParamNode) writeTo(sb *strings.Builder) {
-	sb.WriteString(t.String())
-}
-
-func (t *SqlParamNode) tree() *Tree {
-	return t.tr
-}
-
-func (t *SqlParamNode) Copy() Node {
-	return &SqlParamNode{tr: t.tr, NodeType: NodeSqlParam, Pos: t.Pos}
-}
-
 // CommentNode holds a comment.
 type CommentNode struct {
 	NodeType
@@ -295,7 +217,11 @@ func (p *PipeNode) writeTo(sb *strings.Builder) {
 			}
 			v.writeTo(sb)
 		}
-		sb.WriteString(" := ")
+		if p.IsAssign {
+			sb.WriteString(" = ")
+		} else {
+			sb.WriteString(" := ")
+		}
 	}
 	for i, c := range p.Cmds {
 		if i > 0 {
@@ -362,7 +288,6 @@ func (a *ActionNode) tree() *Tree {
 
 func (a *ActionNode) Copy() Node {
 	return a.tr.newAction(a.Pos, a.Line, a.Pipe.CopyPipe())
-
 }
 
 // CommandNode holds a command (a pipeline inside an evaluating action).
@@ -425,12 +350,12 @@ type IdentifierNode struct {
 	Ident string // The identifier's name.
 }
 
-// NewIdentifier returns a new IdentifierNode with the given identifier name.
+// NewIdentifier returns a new [IdentifierNode] with the given identifier name.
 func NewIdentifier(ident string) *IdentifierNode {
 	return &IdentifierNode{NodeType: NodeIdentifier, Ident: ident}
 }
 
-// SetPos sets the position. NewIdentifier is a public method so we can't modify its signature.
+// SetPos sets the position. [NewIdentifier] is a public method so we can't modify its signature.
 // Chained for convenience.
 // TODO: fix one day?
 func (i *IdentifierNode) SetPos(pos Pos) *IdentifierNode {
@@ -438,7 +363,7 @@ func (i *IdentifierNode) SetPos(pos Pos) *IdentifierNode {
 	return i
 }
 
-// SetTree sets the parent tree for the node. NewIdentifier is a public method so we can't modify its signature.
+// SetTree sets the parent tree for the node. [NewIdentifier] is a public method so we can't modify its signature.
 // Chained for convenience.
 // TODO: fix one day?
 func (i *IdentifierNode) SetTree(t *Tree) *IdentifierNode {

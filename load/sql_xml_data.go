@@ -11,9 +11,8 @@ import (
 type Sql struct {
 	Func       string `xml:"func,attr"`
 	Name       string `xml:"name,attr"`
-	NotPrepare bool   `xml:"notPrepare,attr"`
+	NotPrepare bool   `xml:"not_prepare,attr"`
 	Param      string `xml:"param,attr"`
-	Common     bool   `xml:"common,attr"`
 	Statement  string `xml:",chardata"`
 }
 
@@ -85,9 +84,8 @@ func LoadXMLBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 			FuncName:   fmt.Sprintf("%s.%s:%s", pkg, v.Func, v.Name),
 			Sql:        v.Statement,
 			NotPrepare: v.NotPrepare,
-			Common:     v.Common,
 		}
-		if !v.Common && len(v.Param) > 0 {
+		if len(v.Param) > 0 {
 			for _, v := range strings.Split(v.Param, ",") {
 				pname, _, _ := strings.Cut(v, " ")
 				sqlDataInfo.Param = append(sqlDataInfo.Param, strings.TrimSpace(pname))

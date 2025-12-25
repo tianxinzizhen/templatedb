@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 )
 
 func GetDBFuncTemplateDB() (*templatedb.DBFuncTemplateDB, error) {
-	sqldb, err := sql.Open("mysql", "root:lz@3306!@tcp(mysql.local.lezhichuyou.com:3306)/lz_tour?charset=utf8mb4&parseTime=True&loc=Local")
+	sqldb, err := sql.Open("mysql", "lix:lix@1234@tcp(localhost:3306)/lix_test?charset=utf8mb4&parseTime=True&loc=Local")
 	if err != nil {
 		return nil, err
 	}
@@ -35,9 +36,11 @@ func TestSelect(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	for _, v := range list {
-		fmt.Println(v)
-	}
+	b, _ := json.Marshal(list)
+	fmt.Println(string(b))
+	// for _, v := range list {
+	// 	fmt.Println(v)
+	// }
 }
 
 func TestSelectByPoint(t *testing.T) {
@@ -83,7 +86,7 @@ func TestInsert(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	fmt.Println(result)
+	fmt.Println(result.RowsAffected())
 }
 
 func TestUpdate(t *testing.T) {

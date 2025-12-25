@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/tianxinzizhen/templatedb/sqlwrite"
 	"github.com/tianxinzizhen/templatedb/template"
 )
 
@@ -17,7 +18,7 @@ type DBFuncTemplateDB struct {
 	leftDelim, rightDelim string
 	sqlDebug              bool
 	logFunc               func(ctx context.Context, info string)
-	getFieldByName        func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)
+	filedName             template.FiledName
 	getParameterMap       map[reflect.Type]func(any) (string, any, error)
 	setParameterMap       map[reflect.Type]func(src any) (any, error)
 	sqlFunc               template.FuncMap
@@ -71,7 +72,13 @@ func (tdb *DBFuncTemplateDB) AddScan(t reflect.Type, setParameter func(src any) 
 
 func (tdb *DBFuncTemplateDB) GetFieldByName(getFieldByName func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)) {
 	if getFieldByName != nil {
-		tdb.getFieldByName = getFieldByName
+		tdb.filedName = func(t reflect.Type, fieldName string) string {
+			f, ok := getFieldByName(t, fieldName, nil)
+			if ok {
+				return f.Tag.Get("db")
+			}
+			return template.DefaultFieldName(t, fieldName)
+		}
 	}
 }
 
@@ -80,7 +87,7 @@ func NewDBFuncTemplateDB(sqlDB *sql.DB) *DBFuncTemplateDB {
 		db:        sqlDB,
 		leftDelim: "{", rightDelim: "}",
 		sqlFunc:         make(template.FuncMap),
-		getFieldByName:  DefaultGetFieldByName,
+		filedName:       template.DefaultFieldName,
 		getParameterMap: make(map[reflect.Type]func(any) (string, any, error)),
 		setParameterMap: make(map[reflect.Type]func(src any) (any, error)),
 	}
@@ -97,13 +104,19 @@ func NewDBFuncTemplateDB(sqlDB *sql.DB) *DBFuncTemplateDB {
 	return tdb
 }
 
+const (
+	OptionNone int = 1 << iota
+	OptionNotPrepare
+	OptionBatch
+)
+
 type funcExecOption struct {
-	ctx        context.Context
-	param      any
-	args       []any
-	args_Index []any
-	result     []reflect.Value
-	sql        string
+	ctx    context.Context
+	param  any
+	result []reflect.Value
+	sql    string
+	args   []any
+	option int
 }
 
 type keyLogSqlFuncName struct{}
@@ -114,23 +127,33 @@ func FromLogSqlFuncName(ctx context.Context) (sql string, ok bool) {
 }
 
 func (tdb *DBFuncTemplateDB) templateBuild(templateSql *template.Template, op *funcExecOption) error {
-	var err error
-	op.sql, op.args, err = templateSql.ExecuteBuilder(op.param, op.args, op.args_Index)
+	sqlWrite := &sqlwrite.SqlWrite{}
+	err := templateSql.Execute(sqlWrite, op.param)
 	if err != nil {
 		return err
 	}
-	if templateSql.NotPrepare {
-		op.sql, err = SqlInterpolateParams(op.sql, op.args)
+	if op.option&OptionNotPrepare != 0 {
+		op.sql, err = SqlInterpolateParams(sqlWrite.String(), sqlWrite.Args)
 		if err != nil {
 			return err
 		}
 		op.args = nil
+	} else {
+		op.sql = sqlWrite.String()
+		op.args = sqlWrite.Args
 	}
 	tdb.sqlPrintAndRecord(op.ctx, templateSql.Name(), op.sql, op.args)
 	return err
 }
-
 func (tdb *DBFuncTemplateDB) query(db sqlDB, op *funcExecOption) error {
+	return tdb.queryOption(db, op, queryOption{})
+}
+
+type queryOption struct {
+	selectOne bool
+}
+
+func (tdb *DBFuncTemplateDB) queryOption(db sqlDB, op *funcExecOption, queryOption queryOption) error {
 	if op.ctx == nil {
 		op.ctx = context.Background()
 	}
@@ -143,24 +166,16 @@ func (tdb *DBFuncTemplateDB) query(db sqlDB, op *funcExecOption) error {
 	if err != nil {
 		return err
 	}
-	dest, more, arrayLen, err := tdb.newScanDestByValues(columns, op.result)
-	if err != nil {
-		return err
-	}
-	i := 0
 	for rows.Next() {
-		tdb.nextNewScanDest(op.result, dest)
+		dest, err := tdb.getScanDest(columns, op.result)
+		if err != nil {
+			return err
+		}
 		err = rows.Scan(dest...)
 		if err != nil {
 			return err
 		}
-		nextSetResult(op.result, i, dest)
-		if more {
-			i++
-			if arrayLen > 0 && i == arrayLen {
-				break
-			}
-		} else {
+		if queryOption.selectOne {
 			break
 		}
 	}
@@ -304,8 +319,7 @@ func (tdb *DBFuncTemplateDB) Recover(ctx context.Context, err *error) {
 
 func (tdb *DBFuncTemplateDB) ParseSql(tsql string) (*template.Template, error) {
 	return template.New("").Delims(tdb.leftDelim, tdb.rightDelim).
-		GetFieldByName(tdb.getFieldByName).
-		GetParameterMap(tdb.getParameterMap).
+		SetFieldName(tdb.filedName).
 		Funcs(tdb.sqlFunc).Parse(tsql)
 }
 
@@ -325,12 +339,13 @@ func (tdb *DBFuncTemplateDB) sqlTemplateBuild(ctx context.Context, tsql string, 
 		tdb.template[pc][line] = templateSql
 	}
 	templateSql := tdb.template[pc][line]
-	sql, args, err := templateSql.ExecuteBuilder(parms, nil, nil)
+	sqw := &sqlwrite.SqlWrite{}
+	err := templateSql.Execute(sqw, parms)
 	if err != nil {
 		return "", nil, err
 	}
-	tdb.sqlPrintAndRecord(ctx, fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line), sql, args)
-	return sql, args, err
+	tdb.sqlPrintAndRecord(ctx, fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line), sqw.String(), sqw.Args)
+	return sqw.String(), sqw.Args, err
 }
 
 func (tdb *DBFuncTemplateDB) sqlPrintAndRecord(ctx context.Context, sqlFuncName, sql string, args []any) {

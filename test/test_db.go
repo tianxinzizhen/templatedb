@@ -19,8 +19,8 @@ create table test(
 insert into test values(1,"a");
 */
 type TestDB struct {
-	//sql select * from test where id=?
-	Select func(ctx context.Context, id int) ([]*Test, error)
+	//sql select * from test where id=@id
+	Select func(ctx context.Context, id int) ([]int, error)
 
 	//sql select * from test where id=?
 	SelectNoReturnErr func(ctx context.Context, id int) []*Test
@@ -53,7 +53,7 @@ type TestDB struct {
 	/*sql
 	insert into test values(@id,@name)
 	*/
-	Insert func(ctx context.Context, testInfo *Test) (*sql.Result, error)
+	Insert func(ctx context.Context, testInfo *Test) (sql.Result, error)
 
 	/*sql
 	insert into test values(@id,@name)
@@ -66,9 +66,9 @@ type TestDB struct {
 	set name=?
 	where id=?
 	*/
-	Update func(ctx context.Context, testInfo *Test) (*sql.Result, error)
+	Update func(ctx context.Context, testInfo *Test) (sql.Result, error)
 
-	/*sql
+	/*sql?option{not_prepare:true}
 	update test
 	set name=?
 	where id=?

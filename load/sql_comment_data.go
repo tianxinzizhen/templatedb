@@ -15,7 +15,7 @@ type SqlDataInfo struct {
 	Name       string
 	Sql        string
 	NotPrepare bool
-	Common     bool
+	Batch      bool
 	Param      []string
 }
 
@@ -95,32 +95,37 @@ func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 											FuncName: fmt.Sprintf("%s.%s.%s:", pkg, typeSpec.Name.String(), field.Names[0].String()),
 											Sql:      sql,
 										}
-										for strings.HasPrefix(sqlDataInfo.Sql, ":") {
-											sqlDataInfo.Sql = sqlDataInfo.Sql[1:]
-											if strings.HasPrefix(sqlDataInfo.Sql, "not-prepare") {
-												sqlDataInfo.NotPrepare = true
-												sqlDataInfo.Sql = sqlDataInfo.Sql[len("not-prepare"):]
-											} else if strings.HasPrefix(sqlDataInfo.Sql, "common=") {
-												sqlDataInfo.Common = true
-												sqlDataInfo.Sql = sqlDataInfo.Sql[len("common="):]
-											commonName:
-												for i := 0; i < len(sqlDataInfo.Sql); i++ {
-													switch sqlDataInfo.Sql[i] {
-													case ' ', '\n', ':':
-														sqlDataInfo.Name = strings.TrimSpace(sqlDataInfo.Sql[:i])
-														sqlDataInfo.Sql = sqlDataInfo.Sql[i:]
-														break commonName
+										var optionStr string
+										if strings.HasPrefix(sqlDataInfo.Sql, "?option{") {
+											if optionStr, sqlDataInfo.Sql, ok = strings.Cut(sqlDataInfo.Sql, "}"); ok {
+												optionStr = strings.TrimSpace(optionStr)
+												optionStr = strings.TrimPrefix(optionStr, "?option{")
+												for _, v := range strings.Split(optionStr, ",") {
+													v = strings.TrimSpace(v)
+													if len(v) == 0 {
+														continue
+													}
+													if k, v, ok := strings.Cut(v, ":"); ok {
+														switch k {
+														case "not_prepare":
+															sqlDataInfo.NotPrepare = v == "true"
+														case "batch":
+															sqlDataInfo.Batch = v == "true"
+														case "name":
+															sqlDataInfo.Name = v
+														}
 													}
 												}
 											}
 										}
-										if !sqlDataInfo.Common && fc.Params != nil && len(fc.Params.List) > 0 && len(fc.Params.List[0].Names) > 0 {
-											for _, v := range fc.Params.List {
-												for _, v := range v.Names {
+										for _, v := range fc.Params.List {
+											for _, v := range v.Names {
+												if len(v.Name) > 0 {
 													sqlDataInfo.Param = append(sqlDataInfo.Param, v.Name)
 												}
 											}
 										}
+										// 检查name是否重复
 										if _, ok := nameUnique[sqlDataInfo.Name]; ok {
 											return nil, fmt.Errorf("%s.%s load sql info by Duplicate name[%s]", pkg, typeSpec.Name.String(), sqlDataInfo.Name)
 										} else {

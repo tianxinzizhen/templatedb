@@ -5,15 +5,14 @@
 package template
 
 import (
-	"encoding/json"
+	"maps"
 	"reflect"
+	"strings"
 	"sync"
-	"time"
+	"unicode"
 
 	"github.com/tianxinzizhen/templatedb/template/parse"
 )
-
-var AtSignString = "@"
 
 // common holds the information shared by related templates.
 type common struct {
@@ -28,25 +27,51 @@ type common struct {
 	execFuncs  map[string]reflect.Value
 }
 
+type FiledName func(t reflect.Type, fieldName string) string
+
 // Template is the representation of a parsed template. The *parse.Tree
-// field is exported only for use by html/template and should be treated
+// field is exported only for use by [html/template] and should be treated
 // as unexported by all other clients.
 type Template struct {
 	name string
 	*parse.Tree
 	*common
-	NotPrepare      bool
-	Param           []string
-	leftDelim       string
-	rightDelim      string
-	getFieldByName  func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)
-	getParameterMap map[reflect.Type]func(any) (string, any, error)
+	leftDelim  string
+	rightDelim string
+	filedName  FiledName
+}
+
+func DefaultFieldName(_t reflect.Type, fieldName string) string {
+	sb := strings.Builder{}
+	prev := '_'
+	for _, v := range fieldName {
+		switch v {
+		case '_':
+		default:
+			if prev == '_' {
+				sb.WriteRune(unicode.ToTitle(v))
+			} else {
+				sb.WriteRune(v)
+			}
+		}
+		prev = v
+	}
+	return sb.String()
+}
+
+func (t *Template) SetFieldName(fieldName FiledName) *Template {
+	if fieldName == nil {
+		fieldName = DefaultFieldName
+	}
+	t.filedName = fieldName
+	return t
 }
 
 // New allocates a new, undefined template with the given name.
 func New(name string) *Template {
 	t := &Template{
-		name: name,
+		name:      name,
+		filedName: DefaultFieldName,
 	}
 	t.init()
 	return t
@@ -67,12 +92,11 @@ func (t *Template) Name() string {
 func (t *Template) New(name string) *Template {
 	t.init()
 	nt := &Template{
-		name:            name,
-		common:          t.common,
-		leftDelim:       t.leftDelim,
-		rightDelim:      t.rightDelim,
-		getFieldByName:  t.getFieldByName,
-		getParameterMap: t.getParameterMap,
+		name:       name,
+		common:     t.common,
+		leftDelim:  t.leftDelim,
+		rightDelim: t.rightDelim,
+		filedName:  DefaultFieldName,
 	}
 	return nt
 }
@@ -90,7 +114,7 @@ func (t *Template) init() {
 
 // Clone returns a duplicate of the template, including all associated
 // templates. The actual representation is not copied, but the name space of
-// associated templates is, so further calls to Parse in the copy will add
+// associated templates is, so further calls to [Template.Parse] in the copy will add
 // templates to the copy but not to the original. Clone can be used to prepare
 // common templates and use them with variant definitions for other templates
 // by adding the variants after the clone is made.
@@ -113,25 +137,19 @@ func (t *Template) Clone() (*Template, error) {
 	}
 	t.muFuncs.RLock()
 	defer t.muFuncs.RUnlock()
-	for k, v := range t.parseFuncs {
-		nt.parseFuncs[k] = v
-	}
-	for k, v := range t.execFuncs {
-		nt.execFuncs[k] = v
-	}
+	maps.Copy(nt.parseFuncs, t.parseFuncs)
+	maps.Copy(nt.execFuncs, t.execFuncs)
 	return nt, nil
 }
 
 // copy returns a shallow copy of t, with common set to the argument.
 func (t *Template) copy(c *common) *Template {
 	return &Template{
-		name:            t.name,
-		Tree:            t.Tree,
-		common:          c,
-		leftDelim:       t.leftDelim,
-		rightDelim:      t.rightDelim,
-		getFieldByName:  t.getFieldByName,
-		getParameterMap: t.getParameterMap,
+		name:       t.name,
+		Tree:       t.Tree,
+		common:     c,
+		leftDelim:  t.leftDelim,
+		rightDelim: t.rightDelim,
 	}
 }
 
@@ -170,7 +188,7 @@ func (t *Template) Templates() []*Template {
 }
 
 // Delims sets the action delimiters to the specified strings, to be used in
-// subsequent calls to Parse, ParseFiles, or ParseGlob. Nested template
+// subsequent calls to [Template.Parse], [Template.ParseFiles], or [Template.ParseGlob]. Nested template
 // definitions will inherit the settings. An empty delimiter stands for the
 // corresponding default: {{ or }}.
 // The return value is the template, so calls can be chained.
@@ -179,64 +197,6 @@ func (t *Template) Delims(left, right string) *Template {
 	t.leftDelim = left
 	t.rightDelim = right
 	return t
-}
-
-func (t *Template) GetFieldByName(getFieldByName func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)) *Template {
-	t.init()
-	t.getFieldByName = getFieldByName
-	return t
-}
-
-func (t *Template) GetParameterMap(getParameterMap map[reflect.Type]func(any) (string, any, error)) *Template {
-	t.init()
-	t.getParameterMap = getParameterMap
-	return t
-}
-
-var timeType reflect.Type = reflect.TypeOf(time.Time{})
-
-func notBasicType(field reflect.Type) bool {
-	for field.Kind() == reflect.Pointer {
-		field = field.Elem()
-	}
-	if field == timeType {
-		return false
-	}
-	if field.Kind() == reflect.Struct || field.Kind() == reflect.Slice || field.Kind() == reflect.Map {
-		return true
-	} else {
-		return false
-	}
-}
-
-func (t *Template) GetParameter(arg any) (string, any, error) {
-	ps := "?"
-	if arg != nil {
-		if t.getParameterMap != nil {
-			if fn, ok := t.getParameterMap[reflect.TypeOf(arg)]; ok {
-				var err error
-				ps, arg, err = fn(arg)
-				if err != nil {
-					return "", nil, err
-				}
-			}
-		}
-		at := reflect.TypeOf(arg)
-		switch at.Kind() {
-		case reflect.Slice, reflect.Pointer, reflect.Map, reflect.Interface:
-			if reflect.ValueOf(arg).IsNil() {
-				return ps, nil, nil
-			}
-		}
-		if notBasicType(at) {
-			argJson, err := json.Marshal(arg)
-			if err != nil {
-				return "", nil, err
-			}
-			arg = string(argJson)
-		}
-	}
-	return ps, arg, nil
 }
 
 // Funcs adds the elements of the argument map to the template's function map.
@@ -278,31 +238,7 @@ func (t *Template) Lookup(name string) *Template {
 func (t *Template) Parse(text string) (*Template, error) {
 	t.init()
 	t.muFuncs.RLock()
-	trees, err := parse.Parse(t.name, text, t.leftDelim, t.rightDelim, AtSignString, t.parseFuncs, builtins())
-	t.muFuncs.RUnlock()
-	if err != nil {
-		return nil, err
-	}
-	if t.getParameterMap == nil {
-		t.getParameterMap = make(map[reflect.Type]func(any) (string, any, error))
-	}
-	if t.getFieldByName == nil {
-		t.getFieldByName = func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool) {
-			return t.FieldByName(fieldName)
-		}
-	}
-	// Add the newly parsed trees, including the one for t, into our common structure.
-	for name, tree := range trees {
-		if _, err := t.AddParseTree(name, tree); err != nil {
-			return nil, err
-		}
-	}
-	return t, nil
-}
-func (t *Template) ParseName(name, text string) (*Template, error) {
-	t.init()
-	t.muFuncs.RLock()
-	trees, err := parse.Parse(name, text, t.leftDelim, t.rightDelim, AtSignString, t.parseFuncs, builtins())
+	trees, err := parse.Parse(t.name, text, t.leftDelim, t.rightDelim, t.parseFuncs, builtins())
 	t.muFuncs.RUnlock()
 	if err != nil {
 		return nil, err

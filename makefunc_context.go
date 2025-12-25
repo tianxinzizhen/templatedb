@@ -11,6 +11,7 @@ import (
 
 	"github.com/tianxinzizhen/templatedb/load"
 	"github.com/tianxinzizhen/templatedb/template"
+	"github.com/tianxinzizhen/templatedb/template/parse"
 )
 
 type keySqlTx struct{}
@@ -86,10 +87,18 @@ func (e *DBFuncError) Unwrap() error {
 func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template, sqlInfo *load.SqlDataInfo) reflect.Value {
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
 		op := &funcExecOption{}
+		if sqlInfo.NotPrepare {
+			op.option |= OptionNotPrepare
+		}
+		// 批量执行
+		if sqlInfo.Batch {
+			op.option |= OptionBatch
+		}
 		var opArgs []any
+		var useMultiParam bool
 		for _, v := range args {
 			val := v.Interface()
-			op.args_Index = append(op.args_Index, val)
+			opArgs = append(opArgs, val)
 			if v.Type().Implements(contextType) {
 				if val != nil {
 					op.ctx = val.(context.Context)
@@ -100,19 +109,23 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 					pvt = pvt.Elem()
 				}
 				switch pvt.Kind() {
-				case reflect.Map, reflect.Slice, reflect.Array, reflect.Struct:
-					if _, ok := tdb.getParameterMap[pvt]; ok {
-						opArgs = append(opArgs, val)
-					} else {
-						op.param = val
-					}
+				case reflect.Map, reflect.Slice, reflect.Struct:
+					op.param = val
 				default:
-					opArgs = append(opArgs, val)
+					useMultiParam = true
 				}
 			}
 		}
-		op.args = opArgs
-
+		if useMultiParam && len(sqlInfo.Param) > 0 {
+			paramMap := map[string]any{}
+			for i, v := range sqlInfo.Param {
+				if reflect.ValueOf(opArgs[i]).Type().Implements(contextType) {
+					continue
+				}
+				paramMap[v] = opArgs[i]
+			}
+			op.param = paramMap
+		}
 		var db sqlDB = tdb.db
 		if op.ctx == nil {
 			op.ctx = context.Background()
@@ -157,6 +170,12 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 				op.result = results[:len(results)-1]
 			}
 			err = tdb.query(db, op)
+		case SelectOneAction:
+			op.result = results
+			if hasReturnErr {
+				op.result = results[:len(results)-1]
+			}
+			err = tdb.queryOption(db, op, queryOption{selectOne: true})
 		case ExecNoResultAction:
 			_, err = tdb.exec(db, op)
 		}
@@ -182,8 +201,6 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 	}
 	dt := dv.Type()
 	tp := template.New(dt.Name()).Delims(tdb.leftDelim, tdb.rightDelim).
-		GetFieldByName(tdb.getFieldByName).
-		GetParameterMap(tdb.getParameterMap).
 		Funcs(tdb.sqlFunc)
 	var sqlInfos []*load.SqlDataInfo
 	var err error
@@ -203,17 +220,16 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 		return errors.New("DBFuncContextInit not load sql script data")
 	}
 	for _, sqlInfo := range sqlInfos {
-		_, err = tp.ParseName(sqlInfo.Name, sqlInfo.Sql)
+		tree, err := parse.Parse(sqlInfo.Name, sqlInfo.Sql, tdb.leftDelim, tdb.rightDelim)
 		if err != nil {
 			return err
 		}
-		if sqlInfo.Common {
-			continue
+		_, err = tp.AddParseTree(sqlInfo.Name, tree[sqlInfo.Name])
+		if err != nil {
+			return err
 		}
-		t := tp.Lookup(sqlInfo.Name)
-		t.NotPrepare = sqlInfo.NotPrepare
-		t.Param = sqlInfo.Param
 		if fc, ok := dt.FieldByName(sqlInfo.Name); ok {
+			t := tp.Lookup(sqlInfo.Name)
 			fct := fc.Type
 			if fct.Kind() == reflect.Func {
 				fcv := dv.FieldByIndex(fc.Index)
@@ -246,10 +262,14 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 				}
 				var action Operation = ExecNoResultAction
 				if fct.NumOut() > 0 {
-					if fct.Out(0) == sqlResultType || fct.Out(0) == sqlResultType.Elem() {
+					if fct.Out(0) == sqlResultType {
 						action = ExecAction
 					} else if !fct.Out(0).Implements(errorType) {
-						action = SelectAction
+						if fct.Out(0).Kind() == reflect.Slice {
+							action = SelectAction
+						} else {
+							action = SelectOneAction
+						}
 					}
 				}
 				fcv.Set(makeDBFuncContext(fct, tdb, action, t, sqlInfo))
