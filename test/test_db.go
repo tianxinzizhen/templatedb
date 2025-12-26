@@ -28,16 +28,16 @@ type TestDB struct {
 	//sql select extend,name from test2 where id=@id
 	Select2COne func(ctx context.Context, id int) (*Test, error)
 
-	//sql select * from test where id=?
+	//sql select * from test where id=@id
 	SelectNoReturnErr func(ctx context.Context, id int) []*Test
 
 	/*sql
-	select * from test where id=? limit 1
+	select * from test where id=@id limit 1
 	*/
 	SelectOne func(ctx context.Context, id int) (*Test, error)
 
 	/*sql
-	select * from test where id=?
+	select * from test where id=@id
 	*/
 	SelectOneNoReturnErr func(ctx context.Context, id int) *Test
 
@@ -45,7 +45,7 @@ type TestDB struct {
 
 	// 如果比较符在前面是字段名称,那么默认取该名称参数,否则按参数顺序取
 	/*sql
-	select * from test where id=? and name=?
+	select * from test where id=@id and name=@name
 	*/
 	SelectByTestInfo func(ctx context.Context, testInfo *Test) ([]*Test, error)
 
@@ -74,15 +74,15 @@ type TestDB struct {
 	// 需要返回新插入的受影响id
 	/*sql
 	update test
-	set name=?
-	where id=?
+	set name=@name
+	where id=@id
 	*/
 	Update func(ctx context.Context, testInfo *Test) (sql.Result, error)
 
 	/*sql?option{not_prepare:true}
 	update test
-	set name=?
-	where id=?
+	set name=@name
+	where id=@id
 	*/
 	UpdateNotResultId func(ctx context.Context, testInfo *Test) error
 }
