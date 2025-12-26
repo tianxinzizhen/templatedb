@@ -241,11 +241,19 @@ func (l *lexer) nextItem() item {
 func handleAtsign(input, left, right string) string {
 	isb := strings.Builder{}
 	atsignOpen := false
-	for _, v := range input {
+	for i := 0; i < len(input); i++ {
+
+	}
+	for i := 0; i < len(input); {
+		v, size := utf8.DecodeRuneInString(input[i:])
 		switch {
 		case v == '@':
 			atsignOpen = true
 			isb.WriteString(left)
+			if nv, nsize := utf8.DecodeRuneInString(input[i+size:]); nv == ':' {
+				i += nsize
+				isb.WriteString("json ")
+			}
 			isb.WriteByte('.')
 		case !isAlphaNumeric(v):
 			if atsignOpen {
@@ -256,6 +264,7 @@ func handleAtsign(input, left, right string) string {
 		default:
 			isb.WriteRune(v)
 		}
+		i += size
 	}
 	if atsignOpen {
 		isb.WriteString(right)

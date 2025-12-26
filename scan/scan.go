@@ -21,10 +21,10 @@ func RegisterScanVal[T any](sv ScanVal[T]) error {
 	if reflect.TypeOf(sv.ValPtr()).Kind() != reflect.Pointer {
 		return fmt.Errorf("sv.ValPtr() must be pointer")
 	}
-	if localScanVal[reflect.TypeOf(sv.Val())] != reflect.TypeOf(sv).Elem() {
+	if _, ok := localScanVal[reflect.TypeOf(sv.Val())]; ok {
 		return fmt.Errorf("sv.Val() type already registered")
 	}
-	if localScanVal[reflect.TypeOf(sv.ValPtr())] != reflect.TypeOf(sv).Elem() {
+	if _, ok := localScanVal[reflect.TypeOf(sv.ValPtr())]; ok {
 		return fmt.Errorf("sv.ValPtr() type already registered")
 	}
 	localScanVal[reflect.TypeOf(sv.Val())] = reflect.TypeOf(sv).Elem()

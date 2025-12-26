@@ -22,6 +22,12 @@ type TestDB struct {
 	//sql select * from test where id=@id
 	Select func(ctx context.Context, id int) (IdScan, string, error)
 
+	//sql select * from test2 where id=@id
+	Select2 func(ctx context.Context, id int) ([]Test2, error)
+
+	//sql select extend,name from test2 where id=@id
+	Select2COne func(ctx context.Context, id int) (*Test, error)
+
 	//sql select * from test where id=?
 	SelectNoReturnErr func(ctx context.Context, id int) []*Test
 
@@ -54,6 +60,11 @@ type TestDB struct {
 	insert into test values(@id,@name)
 	*/
 	Insert func(ctx context.Context, testInfo *Test) (sql.Result, error)
+
+	/*sql
+	insert into test2 values(@id,@name,@:extend)
+	*/
+	Insert2 func(ctx context.Context, testInfo *Test2) (sql.Result, error)
 
 	/*sql
 	insert into test values(@id,@name)

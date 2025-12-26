@@ -43,15 +43,12 @@ func comma(iVal reflect.Value) (*sqlwrite.SqlWrite, error) {
 
 func params(list ...reflect.Value) *sqlwrite.SqlWrite {
 	sqw := &sqlwrite.SqlWrite{}
-	var args []any = make([]any, len(list))
 	for i, v := range list {
 		if i > 0 {
 			sqw.WriteString(",")
 		}
-		sqw.WriteString("?")
-		args[i] = v.Interface()
+		sqw.AddParam("? ", v.Interface())
 	}
-	sqw.Args = args
 	return sqw
 }
 
@@ -66,8 +63,7 @@ func like(param reflect.Value) *sqlwrite.SqlWrite {
 	if !strings.HasSuffix(p, "%") {
 		lb.WriteByte('%')
 	}
-	sqw.WriteString(" like ? ")
-	sqw.AddArgs(lb.String())
+	sqw.AddParam("like ?", lb.String())
 	return sqw
 }
 
@@ -79,8 +75,7 @@ func likeRight(param reflect.Value) *sqlwrite.SqlWrite {
 	if !strings.HasSuffix(p, "%") {
 		lb.WriteByte('%')
 	}
-	sqw.WriteString(" like ? ")
-	sqw.AddArgs(lb.String())
+	sqw.AddParam("like ?", lb.String())
 	return sqw
 }
 func likeLeft(param reflect.Value) *sqlwrite.SqlWrite {
@@ -91,8 +86,7 @@ func likeLeft(param reflect.Value) *sqlwrite.SqlWrite {
 		lb.WriteByte('%')
 	}
 	lb.WriteString(p)
-	sqw.WriteString(" like ? ")
-	sqw.AddArgs(lb.String())
+	sqw.AddParam("like ?", lb.String())
 	return sqw
 }
 
@@ -102,16 +96,12 @@ func marshal(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 		if i > 0 {
 			sqw.WriteString(",")
 		}
-		sqw.WriteString("?")
 		vi := v.Interface()
-		isTrue, _ := template.IsTrue(vi)
-		if isTrue {
-			mJson, err := json.Marshal(vi)
-			if err != nil {
-				return nil, err
-			}
-			sqw.AddArgs(string(mJson))
+		mJson, err := json.Marshal(vi)
+		if err != nil {
+			return nil, err
 		}
+		sqw.AddParam("? ", string(mJson))
 	}
 	return sqw, nil
 }

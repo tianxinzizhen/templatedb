@@ -5,6 +5,12 @@ type Test struct {
 	Name string `json:"name,omitempty"`
 }
 
+type Test2 struct {
+	Id     int32  `json:"id,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Extend Test   `json:"extend,omitempty"`
+}
+
 type TestV1 struct {
 	Id   *IdScan `json:"id,omitempty"`
 	Name string  `json:"name,omitempty"`

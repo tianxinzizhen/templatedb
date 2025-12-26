@@ -1135,8 +1135,7 @@ func (s *state) printValue(n parse.Node, v reflect.Value) {
 	if sqw, ok := s.wr.(*sqlwrite.SqlWrite); ok {
 		// 判断值是否是拼接字符串
 		if _, ok := iface.(sqlwrite.Sql); !ok {
-			sqw.WriteString("?")
-			sqw.AddArgs(iface)
+			sqw.AddParam("? ", iface)
 			return
 		}
 	}

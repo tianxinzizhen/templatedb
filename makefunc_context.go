@@ -11,7 +11,6 @@ import (
 
 	"github.com/tianxinzizhen/templatedb/load"
 	"github.com/tianxinzizhen/templatedb/template"
-	"github.com/tianxinzizhen/templatedb/template/parse"
 )
 
 type keySqlTx struct{}
@@ -224,11 +223,7 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 		return errors.New("DBFuncContextInit not load sql script data")
 	}
 	for _, sqlInfo := range sqlInfos {
-		tree, err := parse.Parse(sqlInfo.Name, sqlInfo.Sql, tdb.leftDelim, tdb.rightDelim)
-		if err != nil {
-			return err
-		}
-		_, err = tp.AddParseTree(sqlInfo.Name, tree[sqlInfo.Name])
+		_, err := tp.AddParse(sqlInfo.Name, sqlInfo.Sql)
 		if err != nil {
 			return err
 		}

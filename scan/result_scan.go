@@ -113,8 +113,7 @@ func GetScanDest(filedName func(t reflect.Type, name string) string, columns []*
 		default:
 			v, df = setValue(t, ret, false)
 		}
-		isOne := true
-		for _, c := range columns {
+		for i, c := range columns {
 			switch v.Type().Kind() {
 			case reflect.Map:
 				valT := v.Type().Elem()
@@ -124,7 +123,14 @@ func GetScanDest(filedName func(t reflect.Type, name string) string, columns []*
 				})
 				destSlice = append(destSlice, val.Addr().Interface())
 			case reflect.Struct:
-				if isNotScanVal(v.Type()) {
+				if i == 0 && isScanValJson(c) {
+					ScanVal := ShouldScanValJson(c, v)
+					destSlice = append(destSlice, ScanVal.Interface())
+					deferFn = append(deferFn, func() {
+						v.Set(getScanValJson(ScanVal))
+					})
+					continue
+				} else if isNotScanVal(v.Type()) {
 					fname := filedName(v.Type(), c.Name())
 					fv := v.FieldByName(fname)
 					if !fv.IsValid() || !fv.CanSet() {
@@ -143,15 +149,30 @@ func GetScanDest(filedName func(t reflect.Type, name string) string, columns []*
 							}
 						})
 					} else {
-						destSlice = append(destSlice, fv.Addr().Interface())
+						ScanVal := ShouldScanValJson(c, fv)
+						if isScanValJson(c) {
+							destSlice = append(destSlice, ScanVal.Interface())
+							deferFn = append(deferFn, func() {
+								fv.Set(getScanValJson(ScanVal))
+							})
+						} else {
+							destSlice = append(destSlice, fv.Addr().Interface())
+						}
 					}
-					break
+					continue
 				}
 				fallthrough
 			default:
-				if isOne && v.CanSet() {
-					isOne = false
-					destSlice = append(destSlice, v.Addr().Interface())
+				if i == 0 && v.CanSet() {
+					if isScanValJson(c) {
+						ScanVal := ShouldScanValJson(c, v)
+						destSlice = append(destSlice, ScanVal.Interface())
+						deferFn = append(deferFn, func() {
+							v.Set(getScanValJson(ScanVal))
+						})
+					} else {
+						destSlice = append(destSlice, v.Addr().Interface())
+					}
 				} else {
 					destSlice = append(destSlice, getTempScanDest(c.ScanType()))
 				}
@@ -163,7 +184,8 @@ func GetScanDest(filedName func(t reflect.Type, name string) string, columns []*
 			for i := 0; i < len(columns); i++ {
 				if i < len(ret) {
 					t := ret[i].Type()
-					if isScanVal(t) {
+					switch {
+					case isScanVal(t):
 						scanV := reflect.New(getScanValType(t)).Elem()
 						destSlice = append(destSlice, scanV.Addr().Interface())
 						deferFn = append(deferFn, func() {
@@ -174,7 +196,13 @@ func GetScanDest(filedName func(t reflect.Type, name string) string, columns []*
 								ret[i] = getScanVal(scanV)
 							}
 						})
-					} else {
+					case isScanValJson(columns[i]):
+						ScanVal := ShouldScanValJson(columns[i], ret[i])
+						destSlice = append(destSlice, ScanVal.Addr().Interface())
+						deferFn = append(deferFn, func() {
+							ret[i] = getScanValJson(ScanVal)
+						})
+					default:
 						ret[i] = reflect.New(t).Elem()
 						destSlice = append(destSlice, ret[i].Addr().Interface())
 					}

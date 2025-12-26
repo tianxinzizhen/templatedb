@@ -112,3 +112,71 @@ func TestUpdate(t *testing.T) {
 	}
 	fmt.Println(db.SelectOneNoReturnErr(context.Background(), 2))
 }
+
+func TestInsert2(t *testing.T) {
+	tdb, err := GetDBFuncTemplateDB()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	db, err := NewTestDB(tdb)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	result, err := db.Insert2(context.Background(), &Test2{
+		Id:   2,
+		Name: "b",
+		Extend: Test{
+			Id:   2,
+			Name: "b",
+		},
+	})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	fmt.Println(result.RowsAffected())
+}
+
+func TestSelect2(t *testing.T) {
+	tdb, err := GetDBFuncTemplateDB()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	db, err := NewTestDB(tdb)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	list, err := db.Select2(context.Background(), 2)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	j, _ := json.Marshal(list)
+	fmt.Println(string(j))
+	// for _, v := range list {
+	// 	fmt.Println(v)
+	// }
+}
+
+func TestSelect2COne(t *testing.T) {
+	tdb, err := GetDBFuncTemplateDB()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	db, err := NewTestDB(tdb)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	test, err := db.Select2COne(context.Background(), 2)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	fmt.Println(test)
+}

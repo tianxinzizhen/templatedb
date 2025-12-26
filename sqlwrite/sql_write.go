@@ -21,7 +21,7 @@ func (s *SqlWrite) WriteString(str string) (n int, err error) {
 	return
 }
 
-func (s *SqlWrite) AddArgs(arg any) {
+func (s *SqlWrite) AddParam(sql string, arg any) {
 	if arg == nil {
 		return
 	}
@@ -30,6 +30,7 @@ func (s *SqlWrite) AddArgs(arg any) {
 		s.Sql.WriteString(sqw.String())
 		return
 	} else {
+		s.Sql.WriteString(sql)
 		s.Args = append(s.Args, arg)
 	}
 }
