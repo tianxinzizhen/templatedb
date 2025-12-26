@@ -110,7 +110,11 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 				}
 				switch pvt.Kind() {
 				case reflect.Map, reflect.Slice, reflect.Struct:
-					op.param = val
+					if op.param == nil {
+						op.param = val
+					} else {
+						useMultiParam = true
+					}
 				default:
 					useMultiParam = true
 				}

@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/tianxinzizhen/templatedb/scan"
 	"github.com/tianxinzizhen/templatedb/sqlwrite"
 	"github.com/tianxinzizhen/templatedb/template"
 )
@@ -167,7 +168,7 @@ func (tdb *DBFuncTemplateDB) queryOption(db sqlDB, op *funcExecOption, queryOpti
 		return err
 	}
 	for rows.Next() {
-		dest, df, err := tdb.getScanDest(columns, op.result)
+		dest, df, err := scan.GetScanDest(tdb.filedName, columns, op.result)
 		if err != nil {
 			return err
 		}
