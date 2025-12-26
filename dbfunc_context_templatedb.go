@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
-	"time"
 
 	"github.com/tianxinzizhen/templatedb/scan"
 	"github.com/tianxinzizhen/templatedb/sqlwrite"
@@ -20,8 +19,6 @@ type DBFuncTemplateDB struct {
 	sqlDebug              bool
 	logFunc               func(ctx context.Context, info string)
 	filedName             template.FiledName
-	getParameterMap       map[reflect.Type]func(any) (string, any, error)
-	setParameterMap       map[reflect.Type]func(src any) (any, error)
 	sqlFunc               template.FuncMap
 	template              map[uintptr]map[int]*template.Template
 }
@@ -49,56 +46,13 @@ func (tdb *DBFuncTemplateDB) AddAllTemplateFunc(sqlFunc template.FuncMap) {
 	}
 }
 
-func (tdb *DBFuncTemplateDB) AddGetParameter(t reflect.Type, getParameter func(any) (string, any, error)) error {
-	if _, ok := tdb.getParameterMap[t]; ok {
-		return fmt.Errorf("add GetParameter type [%s] already exists ", t)
-	} else {
-		tdb.getParameterMap[t] = getParameter
-	}
-	return nil
-}
-
-func (tdb *DBFuncTemplateDB) AddSetParameter(t reflect.Type, setParameter func(src any) (any, error)) error {
-	if _, ok := tdb.setParameterMap[t]; ok {
-		return fmt.Errorf("add SetParameter type [%s] already exists ", t)
-	} else {
-		tdb.setParameterMap[t] = setParameter
-	}
-	return nil
-}
-
-func (tdb *DBFuncTemplateDB) AddScan(t reflect.Type, setParameter func(src any) (any, error)) error {
-	return tdb.AddSetParameter(t, setParameter)
-}
-
-func (tdb *DBFuncTemplateDB) GetFieldByName(getFieldByName func(t reflect.Type, fieldName string, scanNum map[string]int) (f reflect.StructField, ok bool)) {
-	if getFieldByName != nil {
-		tdb.filedName = func(t reflect.Type, fieldName string) string {
-			f, ok := getFieldByName(t, fieldName, nil)
-			if ok {
-				return f.Tag.Get("db")
-			}
-			return template.DefaultFieldName(t, fieldName)
-		}
-	}
-}
-
 func NewDBFuncTemplateDB(sqlDB *sql.DB) *DBFuncTemplateDB {
 	tdb := &DBFuncTemplateDB{
 		db:        sqlDB,
 		leftDelim: "{", rightDelim: "}",
-		sqlFunc:         make(template.FuncMap),
-		filedName:       template.DefaultFieldName,
-		getParameterMap: make(map[reflect.Type]func(any) (string, any, error)),
-		setParameterMap: make(map[reflect.Type]func(src any) (any, error)),
+		sqlFunc:   make(template.FuncMap),
+		filedName: template.DefaultFieldName,
 	}
-	//default time get paramter
-	tp := reflect.TypeOf(&time.Time{})
-	tp_get := func(t any) (string, any, error) {
-		return "?", t, nil
-	}
-	tdb.getParameterMap[tp] = tp_get
-	tdb.getParameterMap[tp.Elem()] = tp_get
 	for k, v := range sqlFunc {
 		tdb.sqlFunc[k] = v
 	}
