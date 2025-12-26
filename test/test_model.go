@@ -19,10 +19,10 @@ func (ts *IdScan) Scan(dest any) error {
 	return nil
 }
 
-func (ts *IdScan) Val() any {
+func (ts *IdScan) Val() IdScan {
 	return *ts
 }
 
-func (ts *IdScan) ValPtr() any {
-	return ts
+func (ts IdScan) ValPtr() *IdScan {
+	return &ts
 }

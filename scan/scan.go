@@ -2,20 +2,34 @@ package scan
 
 import (
 	"database/sql"
+	"fmt"
 	"reflect"
 )
 
-type ScanVal interface {
+type ScanVal[T any] interface {
 	sql.Scanner
-	Val() any
-	ValPtr() any
+	Val() T
+	ValPtr() *T
 }
 
 var localScanVal = make(map[reflect.Type]reflect.Type)
 
-func RegisterScanVal(sv ScanVal) {
+func RegisterScanVal[T any](sv ScanVal[T]) error {
+	if reflect.TypeOf(sv.Val()).Kind() == reflect.Pointer {
+		return fmt.Errorf("sv.Val() must be not pointer")
+	}
+	if reflect.TypeOf(sv.ValPtr()).Kind() != reflect.Pointer {
+		return fmt.Errorf("sv.ValPtr() must be pointer")
+	}
+	if localScanVal[reflect.TypeOf(sv.Val())] != reflect.TypeOf(sv).Elem() {
+		return fmt.Errorf("sv.Val() type already registered")
+	}
+	if localScanVal[reflect.TypeOf(sv.ValPtr())] != reflect.TypeOf(sv).Elem() {
+		return fmt.Errorf("sv.ValPtr() type already registered")
+	}
 	localScanVal[reflect.TypeOf(sv.Val())] = reflect.TypeOf(sv).Elem()
 	localScanVal[reflect.TypeOf(sv.ValPtr())] = reflect.TypeOf(sv).Elem()
+	return nil
 }
 
 func isScanVal(t reflect.Type) bool {
@@ -35,23 +49,17 @@ func getScanValType(t reflect.Type) reflect.Type {
 }
 
 func getScanVal(v reflect.Value) reflect.Value {
-	sv := v
-	if v.CanAddr() && v.Kind() == reflect.Struct {
-		sv = sv.Addr()
-	}
-	if svv, ok := sv.Interface().(ScanVal); ok {
-		return reflect.ValueOf(svv.Val())
+	method := v.MethodByName("Val")
+	if method.IsValid() {
+		return method.Call([]reflect.Value{})[0]
 	}
 	return v
 }
 
 func getScanValPtr(v reflect.Value) reflect.Value {
-	sv := v
-	if v.CanAddr() && v.Kind() == reflect.Struct {
-		sv = sv.Addr()
-	}
-	if svv, ok := sv.Interface().(ScanVal); ok {
-		return reflect.ValueOf(svv.ValPtr())
+	method := v.MethodByName("ValPtr")
+	if method.IsValid() {
+		return method.Call([]reflect.Value{})[0]
 	}
 	return v
 }

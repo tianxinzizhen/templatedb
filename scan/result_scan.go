@@ -157,7 +157,6 @@ func GetScanDest(filedName func(t reflect.Type, name string) string, columns []*
 				}
 			}
 		}
-		// 逆向添加deferFn
 		deferFn = append(deferFn, df...)
 	} else {
 		if len(columns) > 0 {
