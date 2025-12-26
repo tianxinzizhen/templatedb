@@ -15,14 +15,15 @@ func getTempScanDest(scanType reflect.Type) any {
 	}
 	if dest, ok := tempScanDest[scanType]; !ok {
 		tempScanDest[scanType] = reflect.New(scanType).Interface()
-		return dest
+		return tempScanDest[scanType]
 	} else {
 		return dest
 	}
 }
-func (tdb *DBFuncTemplateDB) getScanDest(columns []*sql.ColumnType, ret []reflect.Value) (destSlice []any, err error) {
+func (tdb *DBFuncTemplateDB) getScanDest(columns []*sql.ColumnType, ret []reflect.Value) (destSlice []any, deferFn []func(), err error) {
 	if len(ret) == 0 {
-		return nil, fmt.Errorf("not scan dest")
+		err = fmt.Errorf("not scan dest")
+		return
 	}
 	var t reflect.Type
 	if len(ret) == 1 {
@@ -35,11 +36,13 @@ func (tdb *DBFuncTemplateDB) getScanDest(columns []*sql.ColumnType, ret []reflec
 			v = v.Elem()
 		case reflect.Map:
 			if t.Key().Kind() != reflect.String {
-				return nil, fmt.Errorf("map key must be string")
+				err = fmt.Errorf("map key must be string")
+				return
 			}
-			if t.Elem() != reflect.TypeOf((*any)(nil)).Elem() {
-				return nil, fmt.Errorf("map value must not be pointer")
-			}
+			// if t.Elem() != reflect.TypeOf((*any)(nil)).Elem() {
+			// 	err = fmt.Errorf("map value must not be pointer")
+			// 	return
+			// }
 			v = reflect.MakeMap(t)
 			ret[0] = v
 		case reflect.Struct:
@@ -53,9 +56,17 @@ func (tdb *DBFuncTemplateDB) getScanDest(columns []*sql.ColumnType, ret []reflec
 				v = v.Elem()
 			} else {
 				v = reflect.New(t).Elem()
-				ret[0] = reflect.Append(ret[0], v)
+				deferFn = append(deferFn, func() {
+					ret[0] = reflect.Append(ret[0], v)
+				})
 			}
+		default:
+			v = reflect.New(t).Elem()
+			deferFn = append(deferFn, func() {
+				ret[0] = v
+			})
 		}
+		isOne := true
 		for _, c := range columns {
 			switch v.Type().Kind() {
 			case reflect.Struct:
@@ -67,12 +78,16 @@ func (tdb *DBFuncTemplateDB) getScanDest(columns []*sql.ColumnType, ret []reflec
 					destSlice = append(destSlice, getTempScanDest(c.ScanType()))
 				}
 			case reflect.Map:
-				val := reflect.New(v.Type().Elem())
-				v.SetMapIndex(reflect.ValueOf(c.Name()), val)
-				destSlice = append(destSlice, val.Interface())
+				valT := v.Type().Elem()
+				val := reflect.New(valT).Elem()
+				deferFn = append(deferFn, func() {
+					v.SetMapIndex(reflect.ValueOf(c.Name()), val)
+				})
+				destSlice = append(destSlice, val.Addr().Interface())
 			default:
-				if v.CanSet() {
+				if isOne && v.CanSet() {
 					destSlice = append(destSlice, v.Addr().Interface())
+					isOne = false
 				} else {
 					destSlice = append(destSlice, getTempScanDest(c.ScanType()))
 				}

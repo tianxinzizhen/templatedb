@@ -20,7 +20,7 @@ insert into test values(1,"a");
 */
 type TestDB struct {
 	//sql select * from test where id=@id
-	Select func(ctx context.Context, id int) ([]int, error)
+	Select func(ctx context.Context, id int) (map[string]*string, error)
 
 	//sql select * from test where id=?
 	SelectNoReturnErr func(ctx context.Context, id int) []*Test

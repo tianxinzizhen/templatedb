@@ -1133,9 +1133,12 @@ func (s *state) printValue(n parse.Node, v reflect.Value) {
 	}
 	// 针对sql值的特殊处理
 	if sqw, ok := s.wr.(*sqlwrite.SqlWrite); ok {
-		sqw.WriteString("?")
-		sqw.AddArgs(iface)
-		return
+		// 判断值是否是拼接字符串
+		if _, ok := iface.(sqlwrite.Sql); !ok {
+			sqw.WriteString("?")
+			sqw.AddArgs(iface)
+			return
+		}
 	}
 	_, err := fmt.Fprint(s.wr, iface)
 	if err != nil {

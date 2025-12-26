@@ -167,13 +167,16 @@ func (tdb *DBFuncTemplateDB) queryOption(db sqlDB, op *funcExecOption, queryOpti
 		return err
 	}
 	for rows.Next() {
-		dest, err := tdb.getScanDest(columns, op.result)
+		dest, df, err := tdb.getScanDest(columns, op.result)
 		if err != nil {
 			return err
 		}
 		err = rows.Scan(dest...)
 		if err != nil {
 			return err
+		}
+		for _, fn := range df {
+			fn()
 		}
 		if queryOption.selectOne {
 			break
