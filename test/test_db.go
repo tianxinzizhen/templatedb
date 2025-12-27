@@ -19,10 +19,6 @@ create table test(
 insert into test values(1,"a");
 */
 type TestDB struct {
-	/*sql
-	select * from test where id=? limit 1
-	*/
-	SelectOne func(ctx context.Context, id int) (*Test, error)
 
 	//sql select * from test where [id=@id]
 	Select func(ctx context.Context, id int) (IdScan, string, error)
@@ -35,6 +31,11 @@ type TestDB struct {
 
 	//sql select * from test where id=?
 	SelectNoReturnErr func(ctx context.Context, id int) []*Test
+
+	/*sql
+	select * from test where id=? limit 1
+	*/
+	SelectOne func(ctx context.Context, id int) (*Test, error)
 
 	/*sql
 	select * from test where id=?

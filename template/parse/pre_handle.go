@@ -5,7 +5,8 @@ import (
 	"unicode/utf8"
 )
 
-func handleFiledName(input, left, right string, hasFunction func(name string) bool) string {
+func handleFiledName(input, left, right string, hasFunction func(name string) bool) (cond, body string) {
+	condSb := strings.Builder{}
 	sb := strings.Builder{}
 	for i := 0; i < len(input); {
 		v, size := utf8.DecodeRuneInString(input[i:])
@@ -21,20 +22,28 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 				// not key
 				if _, ok := key[name]; !ok {
 					sb.WriteString(".")
+					sb.WriteString(name)
+					condSb.WriteString(".")
+					condSb.WriteString(name)
+					continue
 				} else {
-					return input
+					return "", input
 				}
 			}
+			condSb.WriteRune(' ')
 			sb.WriteString(name)
 		} else if v == '.' || v == '@' {
 			sb.WriteRune(v)
+			condSb.WriteRune(v)
 			i += size
 			v, size = utf8.DecodeRuneInString(input[i:])
 			for isAlphaNumeric(v) {
 				sb.WriteRune(v)
+				condSb.WriteRune(v)
 				i += size
 				v, size = utf8.DecodeRuneInString(input[i:])
 			}
+			condSb.WriteRune(' ')
 		} else if v == ',' {
 			i += size
 			sb.WriteString(right)
@@ -51,15 +60,26 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 			i += size
 		}
 	}
-	return sb.String()
+	return condSb.String(), sb.String()
 }
 
-func handleOption(input string, left, right string) (cond, body string) {
+func handleOption(input string, left, right string, hasFunction func(name string) bool) (cond, body string) {
 	condSb := strings.Builder{}
 	bodySb := strings.Builder{}
 	pk := ""
 	psb := strings.Builder{}
 	for i := 0; i < len(input); {
+		if strings.HasPrefix(input[i:], left) {
+			x := strings.Index(input[i:], right)
+			if x != -1 {
+				cond, body := handleFiledName(input[i+len(left):i+x], left, right, hasFunction)
+				condSb.WriteString(cond)
+				bodySb.WriteString(left)
+				bodySb.WriteString(body)
+				bodySb.WriteString(right)
+				i += x + len(right)
+			}
+		}
 		v, size := utf8.DecodeRuneInString(input[i:])
 		i += size
 		switch {
@@ -84,7 +104,6 @@ func handleOption(input string, left, right string) (cond, body string) {
 						bodySb.WriteByte('.')
 					}
 					condSb.WriteRune(v)
-					condSb.WriteRune(' ')
 					bodySb.WriteRune(v)
 					i += size
 				} else {
@@ -92,6 +111,7 @@ func handleOption(input string, left, right string) (cond, body string) {
 				}
 				v, size = utf8.DecodeRuneInString(input[i:])
 			}
+			condSb.WriteRune(' ')
 			bodySb.WriteString(right)
 		case v == '?':
 			bodySb.WriteString(left)
@@ -132,15 +152,13 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 	isb := strings.Builder{}
 	pk := ""
 	psb := strings.Builder{}
-	for i := 0; i < len(input); i++ {
-
-	}
 	for i := 0; i < len(input); {
 		if strings.HasPrefix(input[i:], left) {
 			x := strings.Index(input[i:], right)
 			if x != -1 {
+				_, body := handleFiledName(input[i+len(left):i+x], left, right, hasFunction)
 				isb.WriteString(left)
-				isb.WriteString(handleFiledName(input[i+len(left):i+x], left, right, hasFunction))
+				isb.WriteString(body)
 				isb.WriteString(right)
 				i += x + len(right)
 			}
@@ -180,7 +198,7 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 			if x == -1 {
 				isb.WriteRune(v)
 			} else {
-				cond, body := handleOption(input[i:i+x], left, right)
+				cond, body := handleOption(input[i:i+x], left, right, hasFunction)
 				isb.WriteString(left)
 				isb.WriteString("if and ")
 				isb.WriteString(cond)
