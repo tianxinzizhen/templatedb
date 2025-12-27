@@ -17,7 +17,7 @@ func isScanValJson(columns *sql.ColumnType) bool {
 
 func ShouldScanValJson(columns *sql.ColumnType, val reflect.Value) reflect.Value {
 	if isScanValJson(columns) {
-		scanVal := reflect.New(reflect.TypeFor[ScanValJson]())
+		scanVal := reflect.New(reflect.TypeOf(ScanValJson{}))
 		if s, ok := scanVal.Interface().(*ScanValJson); ok {
 			s.Val = val
 		}
