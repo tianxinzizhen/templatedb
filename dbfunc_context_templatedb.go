@@ -11,16 +11,22 @@ import (
 	"github.com/tianxinzizhen/templatedb/scan"
 	"github.com/tianxinzizhen/templatedb/sqlwrite"
 	"github.com/tianxinzizhen/templatedb/template"
+	"github.com/tianxinzizhen/templatedb/util"
 )
 
 type DBFuncTemplateDB struct {
-	db                    *sql.DB
-	leftDelim, rightDelim string
-	sqlDebug              bool
-	logFunc               func(ctx context.Context, info string)
-	filedName             template.FiledName
-	sqlFunc               template.FuncMap
-	template              map[uintptr]map[int]*template.Template
+	db                      *sql.DB
+	leftDelim, rightDelim   string
+	sqlDebug                bool
+	logFunc                 func(ctx context.Context, info string)
+	filedName               template.FiledName
+	sqlFunc                 template.FuncMap
+	template                map[uintptr]map[int]*template.Template
+	SqlEscapeBytesBackslash bool
+}
+
+func (tdb *DBFuncTemplateDB) SetSqlEscapeBytesBackslash(sqlEscapeBytesBackslash bool) {
+	tdb.SqlEscapeBytesBackslash = sqlEscapeBytesBackslash
 }
 
 func (tdb *DBFuncTemplateDB) Delims(leftDelim, rightDelim string) {
@@ -88,7 +94,7 @@ func (tdb *DBFuncTemplateDB) templateBuild(templateSql *template.Template, op *f
 		return err
 	}
 	if op.option&OptionNotPrepare != 0 {
-		op.sql, err = SqlInterpolateParams(sqlWrite.String(), sqlWrite.Args)
+		op.sql, err = util.InterpolateParams(sqlWrite.String(), sqlWrite.Args, tdb.SqlEscapeBytesBackslash)
 		if err != nil {
 			return err
 		}
@@ -310,7 +316,7 @@ func (tdb *DBFuncTemplateDB) sqlPrintAndRecord(ctx context.Context, sqlFuncName,
 	needPrintSql := (tdb.sqlDebug && tdb.logFunc != nil)
 	recordSql, recordSqlOk := tdb.FromRecordSql(ctx)
 	if needPrintSql || recordSqlOk {
-		interpolateParamsSql, err := SqlInterpolateParams(sql, args)
+		interpolateParamsSql, err := util.InterpolateParams(sql, args, tdb.SqlEscapeBytesBackslash)
 		if needPrintSql {
 			ctx = context.WithValue(ctx, keyLogSqlFuncName{}, sqlFuncName)
 			if err != nil {

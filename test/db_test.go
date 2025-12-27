@@ -173,7 +173,13 @@ func TestSelect2COne(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	test, err := db.Select2COne(context.Background(), 2)
+	test, err := db.Select2COne(context.Background(), &Test2{
+		Id: 2,
+		Extend: Test{
+			Id:   2,
+			Name: "b",
+		},
+	})
 	if err != nil {
 		t.Error(err)
 		return

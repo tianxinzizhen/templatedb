@@ -237,44 +237,8 @@ func (l *lexer) nextItem() item {
 	}
 }
 
-// 处理input中@信息
-func handleAtsign(input, left, right string) string {
-	isb := strings.Builder{}
-	atsignOpen := false
-	for i := 0; i < len(input); i++ {
-
-	}
-	for i := 0; i < len(input); {
-		v, size := utf8.DecodeRuneInString(input[i:])
-		switch {
-		case v == '@':
-			atsignOpen = true
-			isb.WriteString(left)
-			if nv, nsize := utf8.DecodeRuneInString(input[i+size:]); nv == ':' {
-				i += nsize
-				isb.WriteString("json ")
-			}
-			isb.WriteByte('.')
-		case !isAlphaNumeric(v):
-			if atsignOpen {
-				isb.WriteString(right)
-				atsignOpen = false
-			}
-			isb.WriteRune(v)
-		default:
-			isb.WriteRune(v)
-		}
-		i += size
-	}
-	if atsignOpen {
-		isb.WriteString(right)
-		atsignOpen = false
-	}
-	return isb.String()
-}
-
 // lex creates a new scanner for the input string.
-func lex(name, input, left, right string) *lexer {
+func lex(name, input, left, right string, hasFunction func(name string) bool) *lexer {
 	if left == "" {
 		left = leftDelim
 	}
@@ -282,7 +246,7 @@ func lex(name, input, left, right string) *lexer {
 		right = rightDelim
 	}
 	// 处理input中@信息
-	input = handleAtsign(input, left, right)
+	input = handleAtsign(input, left, right, hasFunction)
 	l := &lexer{
 		name:         name,
 		input:        input,
@@ -458,7 +422,7 @@ func lexInsideAction(l *lexer) stateFn {
 		return lexVariable
 	case r == '\'':
 		return lexChar
-	case r == '.':
+	case r == '.' || r == '@':
 		// special look-ahead for ".field" so we don't break l.backup().
 		if l.pos < Pos(len(l.input)) {
 			r := l.input[l.pos]

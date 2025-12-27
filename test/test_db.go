@@ -19,25 +19,25 @@ create table test(
 insert into test values(1,"a");
 */
 type TestDB struct {
-	//sql select * from test where id=@id
-	Select func(ctx context.Context, id int) (IdScan, string, error)
-
-	//sql select * from test2 where id=@id
-	Select2 func(ctx context.Context, id int) ([]Test2, error)
-
-	//sql select extend,name from test2 where id=@id
-	Select2COne func(ctx context.Context, id int) (*Test, error)
-
-	//sql select * from test where id=@id
-	SelectNoReturnErr func(ctx context.Context, id int) []*Test
-
 	/*sql
-	select * from test where id=@id limit 1
+	select * from test where id=? limit 1
 	*/
 	SelectOne func(ctx context.Context, id int) (*Test, error)
 
+	//sql select * from test where id=@id
+	Select func(ctx context.Context, id int) (IdScan, string, error)
+
+	//sql select * from test2 where id=?
+	Select2 func(ctx context.Context, id int) ([]Test2, error)
+
+	//sql?option{not_prepare:true} select extend,name from test2 where id=?
+	Select2COne func(ctx context.Context, id *Test2) (*Test, error)
+
+	//sql select * from test where id=?
+	SelectNoReturnErr func(ctx context.Context, id int) []*Test
+
 	/*sql
-	select * from test where id=@id
+	select * from test where id=?
 	*/
 	SelectOneNoReturnErr func(ctx context.Context, id int) *Test
 
@@ -57,7 +57,7 @@ type TestDB struct {
 
 	// 需要返回新插入的自增id
 	/*sql
-	insert into test values(@id,@name)
+	insert into test values({id,name})
 	*/
 	Insert func(ctx context.Context, testInfo *Test) (sql.Result, error)
 
