@@ -54,6 +54,79 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 	return sb.String()
 }
 
+func handleOption(input string, left, right string) (cond, body string) {
+	condSb := strings.Builder{}
+	bodySb := strings.Builder{}
+	pk := ""
+	psb := strings.Builder{}
+	for i := 0; i < len(input); {
+		v, size := utf8.DecodeRuneInString(input[i:])
+		i += size
+		switch {
+		case v == '@':
+			// skip @@
+			v, size = utf8.DecodeRuneInString(input[i:])
+			if v == '@' {
+				bodySb.WriteString("@@")
+				i += size
+				continue
+			}
+			dot := true
+			bodySb.WriteString(left)
+			for i < len(input) {
+				if v == ':' {
+					bodySb.WriteString("json ")
+					i += size
+				} else if isAlphaNumeric(v) {
+					if dot {
+						dot = false
+						condSb.WriteByte('.')
+						bodySb.WriteByte('.')
+					}
+					condSb.WriteRune(v)
+					condSb.WriteRune(' ')
+					bodySb.WriteRune(v)
+					i += size
+				} else {
+					break
+				}
+				v, size = utf8.DecodeRuneInString(input[i:])
+			}
+			bodySb.WriteString(right)
+		case v == '?':
+			bodySb.WriteString(left)
+			v, size = utf8.DecodeRuneInString(input[i:])
+			if v == ':' {
+				i += size
+				bodySb.WriteString("json ")
+			}
+			bodySb.WriteString("." + pk)
+			condSb.WriteString("." + pk)
+			condSb.WriteRune(' ')
+			bodySb.WriteString(right)
+		case isAlphaNumeric(v):
+			bodySb.WriteRune(v)
+			psb.WriteRune(v)
+		default:
+			if isSpace(v) {
+				bodySb.WriteRune(' ')
+				v, size = utf8.DecodeRuneInString(input[i:])
+				for isSpace(v) {
+					i += size
+					v, size = utf8.DecodeRuneInString(input[i:])
+				}
+			} else {
+				if psb.String() != "" {
+					pk = psb.String()
+				}
+				psb.Reset()
+				bodySb.WriteRune(v)
+			}
+		}
+	}
+	return condSb.String(), bodySb.String()
+}
+
 // 处理input中@信息
 func handleAtsign(input, left, right string, hasFunction func(name string) bool) string {
 	isb := strings.Builder{}
@@ -107,9 +180,14 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 			if x == -1 {
 				isb.WriteRune(v)
 			} else {
+				cond, body := handleOption(input[i:i+x], left, right)
 				isb.WriteString(left)
-				isb.WriteString("json ")
-				isb.WriteString(input[i+size : i+x])
+				isb.WriteString("if and ")
+				isb.WriteString(cond)
+				isb.WriteString(right)
+				isb.WriteString(body)
+				isb.WriteString(left)
+				isb.WriteString("end")
 				isb.WriteString(right)
 				i += x + 1 // skip ']'
 			}
@@ -126,10 +204,6 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 			isb.WriteRune(v)
 			psb.WriteRune(v)
 		default:
-			if psb.String() != "" {
-				pk = psb.String()
-			}
-			psb.Reset()
 			if isSpace(v) {
 				isb.WriteRune(' ')
 				v, size = utf8.DecodeRuneInString(input[i:])
@@ -138,6 +212,10 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 					v, size = utf8.DecodeRuneInString(input[i:])
 				}
 			} else {
+				if psb.String() != "" {
+					pk = psb.String()
+				}
+				psb.Reset()
 				isb.WriteRune(v)
 			}
 		}

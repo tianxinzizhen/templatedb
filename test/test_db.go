@@ -24,7 +24,7 @@ type TestDB struct {
 	*/
 	SelectOne func(ctx context.Context, id int) (*Test, error)
 
-	//sql select * from test where id=@id
+	//sql select * from test where [id=@id]
 	Select func(ctx context.Context, id int) (IdScan, string, error)
 
 	//sql select * from test2 where id=?
