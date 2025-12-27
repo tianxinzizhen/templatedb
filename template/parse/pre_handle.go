@@ -127,7 +127,7 @@ func handleOption(input string, left, right string) (cond, body string) {
 	return condSb.String(), bodySb.String()
 }
 
-// 处理input中@信息
+// 处理input中@信息，将其替换为left+filedName+right
 func handleAtsign(input, left, right string, hasFunction func(name string) bool) string {
 	isb := strings.Builder{}
 	pk := ""
