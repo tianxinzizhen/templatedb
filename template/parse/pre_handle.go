@@ -20,6 +20,7 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 		insideAction: false,
 	}
 	useMuiltiFieldOutput := true
+	useFunc := false
 	for l.nextItem().typ != itemEOF {
 		if l.item.typ == itemRightDelim {
 			bodySb.WriteString(l.item.val)
@@ -35,6 +36,7 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 					bodySb.WriteRune('.')
 				} else {
 					useMuiltiFieldOutput = false
+					useFunc = true
 				}
 			case itemChar:
 				if l.item.val == "," {
@@ -54,6 +56,13 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 			case itemField:
 				condSb.WriteString(l.item.val)
 				condSb.WriteRune(' ')
+			}
+		} else if useFunc {
+			switch l.item.typ {
+			case itemChar:
+				if l.item.val == "," {
+					l.item.val = " "
+				}
 			}
 		}
 		bodySb.WriteString(l.item.val)

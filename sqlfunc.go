@@ -23,6 +23,8 @@ func init() {
 	AddTemplateFunc("param", params)
 	AddTemplateFunc("marshal", marshal)
 	AddTemplateFunc("json", marshal)
+	AddTemplateFunc("in", inParameter)
+	AddTemplateFunc("set", setParameter)
 }
 
 func AddTemplateFunc(key string, funcMethod any) error {
@@ -94,6 +96,7 @@ func likeRight(param reflect.Value) *sqlwrite.SqlWrite {
 	sqw.WriteParam("like ?", lb.String())
 	return sqw
 }
+
 func likeLeft(param reflect.Value) *sqlwrite.SqlWrite {
 	sqw := &sqlwrite.SqlWrite{}
 	p := fmt.Sprint(param)
@@ -118,6 +121,74 @@ func marshal(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 			return nil, err
 		}
 		sqw.WriteParam("? ", string(mJson))
+	}
+	return sqw, nil
+}
+
+func inParameter(list ...reflect.Value) *sqlwrite.SqlWrite {
+	sqw := &sqlwrite.SqlWrite{}
+	var num int
+	for _, v := range list {
+		if v.Kind() == reflect.Slice {
+			for i := 0; i < v.Len(); i++ {
+				if num > 0 {
+					sqw.WriteString(",")
+				}
+				num++
+				sqw.WriteParam("? ", v.Index(i).Interface())
+			}
+		} else {
+			if num > 0 {
+				sqw.WriteString(",")
+			}
+			num++
+			sqw.WriteParam("? ", v.Interface())
+		}
+	}
+	return sqw
+}
+
+func setParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
+	sqw := &sqlwrite.SqlWrite{}
+	preAlias := ""
+	var num int
+	for _, param := range list {
+		switch param.Kind() {
+		case reflect.String:
+			if preAlias == "" {
+				preAlias = param.Interface().(string) + "."
+			}
+		case reflect.Map:
+			if param.Type().Key().Kind() != reflect.String {
+				preAlias = ""
+				continue
+			}
+			iter := param.MapRange()
+			for iter.Next() {
+				name := iter.Key().Interface().(string)
+				if num > 0 {
+					sqw.WriteString(",")
+				}
+				num++
+				sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), iter.Value().Interface())
+			}
+			preAlias = ""
+		case reflect.Struct:
+			for i := 0; i < param.NumField(); i++ {
+				val := param.Field(i).Interface()
+				if truth, ok := template.IsTrue(val); ok && truth {
+					name := param.Type().Field(i).Name
+					if num > 0 {
+						sqw.WriteString(",")
+					}
+					num++
+					sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), val)
+				}
+			}
+			preAlias = ""
+		default:
+			return nil, fmt.Errorf("setParameter sql function in paramter is not string, map or struct")
+		}
 	}
 	return sqw, nil
 }
