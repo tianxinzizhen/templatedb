@@ -11,12 +11,12 @@ import (
 )
 
 type SqlDataInfo struct {
-	FuncName   string
-	Name       string
-	Sql        string
-	NotPrepare bool
-	Batch      bool
-	Param      []string
+	FuncName    string
+	Name        string
+	Sql         string
+	NotPrepare  bool
+	BatchInsert bool
+	Param       []string
 }
 
 func LoadComment(pkg string, sql any) ([]*SqlDataInfo, error) {
@@ -109,8 +109,8 @@ func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 														switch k {
 														case "not_prepare":
 															sqlDataInfo.NotPrepare = v == "true"
-														case "batch":
-															sqlDataInfo.Batch = v == "true"
+														case "batch_insert":
+															sqlDataInfo.BatchInsert = v == "true"
 														case "name":
 															sqlDataInfo.Name = v
 														}

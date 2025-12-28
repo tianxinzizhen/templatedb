@@ -68,7 +68,7 @@ func NewDBFuncTemplateDB(sqlDB *sql.DB) *DBFuncTemplateDB {
 const (
 	OptionNone int = 1 << iota
 	OptionNotPrepare
-	OptionBatch
+	OptionBatchInsert
 )
 
 type funcExecOption struct {
@@ -78,6 +78,7 @@ type funcExecOption struct {
 	sql    string
 	args   []any
 	option int
+	offset int
 }
 
 type keyLogSqlFuncName struct{}
@@ -151,6 +152,17 @@ func (tdb *DBFuncTemplateDB) exec(db sqlDB, op *funcExecOption) (ret sql.Result,
 		op.ctx = context.Background()
 	}
 	result, err := db.ExecContext(op.ctx, op.sql, op.args...)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (tdb *DBFuncTemplateDB) prepareContext(db sqlDB, op *funcExecOption) (ret *sql.Stmt, err error) {
+	if op.ctx == nil {
+		op.ctx = context.Background()
+	}
+	result, err := db.PrepareContext(op.ctx, op.sql)
 	if err != nil {
 		return nil, err
 	}

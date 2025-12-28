@@ -90,8 +90,8 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			op.option |= OptionNotPrepare
 		}
 		// 批量执行
-		if sqlInfo.Batch {
-			op.option |= OptionBatch
+		if sqlInfo.BatchInsert {
+			op.option |= OptionBatchInsert
 		}
 		var opArgs []any
 		var useMultiParam bool
@@ -147,24 +147,64 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			hasReturnErr = t.Out(t.NumOut() - 1).Implements(errorType)
 		}
 		var err error
-		err = tdb.templateBuild(templateSql, op)
-		if err != nil {
+		handleErr := func() {
 			if hasReturnErr {
 				results[t.NumOut()-1] = reflect.ValueOf(funcErr(sqlInfo.FuncName, err))
 			} else {
 				tdb.enableRecover(op.ctx)
 				panic(recoverLog(err))
 			}
+		}
+		var changeOp func(op *funcExecOption) (bool, error)
+		if op.option&OptionBatchInsert != 0 {
+			if action != ExecNoResultAction {
+				err = errors.New("batch insert only support exec no result action")
+				handleErr()
+				return results
+			}
+			pv := reflect.ValueOf(op.param)
+			switch pv.Kind() {
+			case reflect.Slice:
+				if pv.Len() == 0 {
+					err = errors.New("batch insert param is empty")
+				}
+			default:
+				err = errors.New("batch insert param type not support")
+			}
+			if err != nil {
+				handleErr()
+				return results
+			}
+			changeOp = func(op *funcExecOption) (bool, error) {
+				if op.offset < pv.Len() {
+					op.param = pv.Index(op.offset).Interface()
+					op.offset++
+					err = tdb.templateBuild(templateSql, op)
+					return true, nil
+				}
+				return false, nil
+			}
+		} else {
+			err = tdb.templateBuild(templateSql, op)
+		}
+		if err != nil {
+			handleErr()
 			return results
 		}
 		switch action {
 		case ExecAction:
 			var ret sql.Result
 			ret, err = tdb.exec(db, op)
+			if err != nil {
+				handleErr()
+				return results
+			}
 			if ret != nil {
 				result := reflect.ValueOf(ret)
-				if t.Out(0).Kind() == reflect.Interface {
-					results[0] = result
+				for i := 0; i < t.NumOut(); i++ {
+					if t.Out(i) == sqlResultType {
+						results[i] = result
+					}
 				}
 			}
 		case SelectAction:
@@ -173,21 +213,70 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 				op.result = results[:len(results)-1]
 			}
 			err = tdb.query(db, op)
+			if err != nil {
+				handleErr()
+				return results
+			}
 		case SelectOneAction:
 			op.result = results
 			if hasReturnErr {
 				op.result = results[:len(results)-1]
 			}
 			err = tdb.queryOption(db, op, queryOption{selectOne: true})
+			if err != nil {
+				handleErr()
+				return results
+			}
 		case ExecNoResultAction:
-			_, err = tdb.exec(db, op)
-		}
-		if err != nil {
-			if hasReturnErr {
-				results[t.NumOut()-1] = reflect.ValueOf(funcErr(sqlInfo.FuncName, err))
+			if op.option&OptionBatchInsert != 0 {
+				stmtMap := map[string]*sql.Stmt{}
+				var preSql string
+				defer func() {
+					for _, s := range stmtMap {
+						if s != nil {
+							s.Close()
+						}
+					}
+				}()
+				for {
+					var change bool
+					change, err = changeOp(op)
+					if err != nil {
+						handleErr()
+						return results
+					}
+					if preSql != op.sql {
+						if s, ok := stmtMap[preSql]; ok {
+							if s != nil {
+								s.Close()
+							}
+						}
+						var stmt *sql.Stmt
+						stmt, err = tdb.prepareContext(db, op)
+						if err != nil {
+							handleErr()
+							return results
+						}
+						preSql = op.sql
+						stmtMap[preSql] = stmt
+					}
+					if stmt, ok := stmtMap[op.sql]; ok {
+						_, err = stmt.ExecContext(op.ctx, op.args...)
+						if err != nil {
+							handleErr()
+							return results
+						}
+					}
+					if !change {
+						break
+					}
+				}
 			} else {
-				tdb.enableRecover(op.ctx)
-				panic(recoverLog(err))
+				_, err = tdb.exec(db, op)
+				if err != nil {
+					handleErr()
+					return results
+				}
 			}
 		}
 		return results
