@@ -19,6 +19,11 @@ create table test(
 insert into test values(1,"a");
 */
 type TestDB struct {
+	// 需要返回新插入的自增id
+	/*sql
+	insert into test values({ @id.bane.nan , @name})
+	*/
+	Insert func(ctx context.Context, testInfo *Test) (sql.Result, error)
 
 	//sql select * from test where [id=@id]
 	Select func(ctx context.Context, id int) (IdScan, string, error)
@@ -55,12 +60,6 @@ type TestDB struct {
 	select * from test where id=@id and name=@name
 	*/
 	SelectAtSignByTestInfo func(ctx context.Context, testInfo *Test) ([]*Test, error)
-
-	// 需要返回新插入的自增id
-	/*sql
-	insert into test values({id,name})
-	*/
-	Insert func(ctx context.Context, testInfo *Test) (sql.Result, error)
 
 	/*sql
 	insert into test2 values(@id,@name,@:extend)

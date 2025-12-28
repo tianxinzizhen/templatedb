@@ -21,7 +21,7 @@ func (s *SqlWrite) WriteString(str string) (n int, err error) {
 	return
 }
 
-func (s *SqlWrite) AddParam(sql string, arg any) {
+func (s *SqlWrite) WriteParam(sql string, arg any) {
 	if arg == nil {
 		return
 	}

@@ -1,66 +1,67 @@
 package parse
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
-func handleFiledName(input, left, right string, hasFunction func(name string) bool) (cond, body string) {
+func handleFiledName(input, left, right string, hasFunction func(name string) bool) (cond, body string, pos int) {
 	condSb := strings.Builder{}
-	sb := strings.Builder{}
-	for i := 0; i < len(input); {
-		v, size := utf8.DecodeRuneInString(input[i:])
-		if isAlphaNumeric(v) {
-			identifier := strings.Builder{}
-			for isAlphaNumeric(v) {
-				identifier.WriteRune(v)
-				i += size
-				v, size = utf8.DecodeRuneInString(input[i:])
-			}
-			name := identifier.String()
-			if !hasFunction(name) {
-				// not key
-				if _, ok := key[name]; !ok {
-					sb.WriteString(".")
-					sb.WriteString(name)
-					condSb.WriteString(".")
-					condSb.WriteString(name)
-					continue
-				} else {
-					return "", input
-				}
-			}
-			condSb.WriteRune(' ')
-			sb.WriteString(name)
-		} else if v == '.' || v == '@' {
-			sb.WriteRune(v)
-			condSb.WriteRune(v)
-			i += size
-			v, size = utf8.DecodeRuneInString(input[i:])
-			for isAlphaNumeric(v) {
-				sb.WriteRune(v)
-				condSb.WriteRune(v)
-				i += size
-				v, size = utf8.DecodeRuneInString(input[i:])
-			}
-			condSb.WriteRune(' ')
-		} else if v == ',' {
-			i += size
-			sb.WriteString(right)
-			sb.WriteRune(',')
-			sb.WriteString(left)
-		} else if isSpace(v) {
-			sb.WriteRune(' ')
-			for isSpace(v) {
-				i += size
-				v, size = utf8.DecodeRuneInString(input[i:])
-			}
-		} else {
-			sb.WriteRune(v)
-			i += size
-		}
+	bodySb := strings.Builder{}
+	l := &lexer{
+		name:         "",
+		input:        input,
+		leftDelim:    left,
+		rightDelim:   right,
+		line:         1,
+		startLine:    1,
+		insideAction: false,
 	}
-	return condSb.String(), sb.String()
+	useMuiltiFieldOutput := true
+	for l.nextItem().typ != itemEOF {
+		if l.item.typ == itemRightDelim {
+			bodySb.WriteString(l.item.val)
+			break
+		} else if l.item.typ > itemKeyword {
+			useMuiltiFieldOutput = false
+		}
+		if useMuiltiFieldOutput {
+			switch l.item.typ {
+			case itemIdentifier:
+				if !hasFunction(l.item.val) {
+					condSb.WriteString(" ." + l.item.val)
+					bodySb.WriteRune('.')
+				} else {
+					useMuiltiFieldOutput = false
+				}
+			case itemChar:
+				if l.item.val == "," {
+					bodySb.WriteString(right)
+					bodySb.WriteString(l.item.val)
+					bodySb.WriteString(left)
+					continue
+				}
+			case itemCharConstant:
+				_, _, tail, err := strconv.UnquoteChar(l.item.val[1:], l.item.val[0])
+				if err != nil {
+					return "", "", 0
+				}
+				if tail != "'" {
+					l.item.val = fmt.Sprintf(`"%s"`, l.item.val[1:len(l.item.val)-1])
+				}
+			case itemField:
+				condSb.WriteString(l.item.val)
+				condSb.WriteRune(' ')
+			}
+		}
+		bodySb.WriteString(l.item.val)
+	}
+	if !useMuiltiFieldOutput {
+		condSb.Reset()
+	}
+	return condSb.String(), bodySb.String(), int(l.item.pos)
 }
 
 func handleOption(input string, left, right string, hasFunction func(name string) bool) (cond, body string) {
@@ -72,12 +73,10 @@ func handleOption(input string, left, right string, hasFunction func(name string
 		if strings.HasPrefix(input[i:], left) {
 			x := strings.Index(input[i:], right)
 			if x != -1 {
-				cond, body := handleFiledName(input[i+len(left):i+x], left, right, hasFunction)
+				cond, body, pos := handleFiledName(input[i:], left, right, hasFunction)
 				condSb.WriteString(cond)
-				bodySb.WriteString(left)
 				bodySb.WriteString(body)
-				bodySb.WriteString(right)
-				i += x + len(right)
+				i += pos + len(right)
 			}
 		}
 		v, size := utf8.DecodeRuneInString(input[i:])
@@ -154,14 +153,9 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 	psb := strings.Builder{}
 	for i := 0; i < len(input); {
 		if strings.HasPrefix(input[i:], left) {
-			x := strings.Index(input[i:], right)
-			if x != -1 {
-				_, body := handleFiledName(input[i+len(left):i+x], left, right, hasFunction)
-				isb.WriteString(left)
-				isb.WriteString(body)
-				isb.WriteString(right)
-				i += x + len(right)
-			}
+			_, body, pos := handleFiledName(input[i:], left, right, hasFunction)
+			isb.WriteString(body)
+			i += pos + len(right)
 		}
 		v, size := utf8.DecodeRuneInString(input[i:])
 		i += size
@@ -199,14 +193,19 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 				isb.WriteRune(v)
 			} else {
 				cond, body := handleOption(input[i:i+x], left, right, hasFunction)
-				isb.WriteString(left)
-				isb.WriteString("if and ")
-				isb.WriteString(cond)
-				isb.WriteString(right)
+				hasCond := strings.TrimSpace(cond) != ""
+				if hasCond {
+					isb.WriteString(left)
+					isb.WriteString("if and ")
+					isb.WriteString(cond)
+					isb.WriteString(right)
+				}
 				isb.WriteString(body)
-				isb.WriteString(left)
-				isb.WriteString("end")
-				isb.WriteString(right)
+				if hasCond {
+					isb.WriteString(left)
+					isb.WriteString("end")
+					isb.WriteString(right)
+				}
 				i += x + 1 // skip ']'
 			}
 		case v == '?':

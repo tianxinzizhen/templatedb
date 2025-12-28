@@ -63,7 +63,7 @@ func params(list ...reflect.Value) *sqlwrite.SqlWrite {
 		if i > 0 {
 			sqw.WriteString(",")
 		}
-		sqw.AddParam("? ", v.Interface())
+		sqw.WriteParam("? ", v.Interface())
 	}
 	return sqw
 }
@@ -79,7 +79,7 @@ func like(param reflect.Value) *sqlwrite.SqlWrite {
 	if !strings.HasSuffix(p, "%") {
 		lb.WriteByte('%')
 	}
-	sqw.AddParam("like ?", lb.String())
+	sqw.WriteParam("like ?", lb.String())
 	return sqw
 }
 
@@ -91,7 +91,7 @@ func likeRight(param reflect.Value) *sqlwrite.SqlWrite {
 	if !strings.HasSuffix(p, "%") {
 		lb.WriteByte('%')
 	}
-	sqw.AddParam("like ?", lb.String())
+	sqw.WriteParam("like ?", lb.String())
 	return sqw
 }
 func likeLeft(param reflect.Value) *sqlwrite.SqlWrite {
@@ -102,7 +102,7 @@ func likeLeft(param reflect.Value) *sqlwrite.SqlWrite {
 		lb.WriteByte('%')
 	}
 	lb.WriteString(p)
-	sqw.AddParam("like ?", lb.String())
+	sqw.WriteParam("like ?", lb.String())
 	return sqw
 }
 
@@ -117,7 +117,7 @@ func marshal(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 		if err != nil {
 			return nil, err
 		}
-		sqw.AddParam("? ", string(mJson))
+		sqw.WriteParam("? ", string(mJson))
 	}
 	return sqw, nil
 }
