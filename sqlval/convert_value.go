@@ -52,14 +52,12 @@ func ConvertValue(ci any, v any) (any, error) {
 	var err error
 	nvc, _ := ci.(driver.NamedValueChecker)
 	if nvc != nil {
-		if nvc != nil {
-			nv := &driver.NamedValue{
-				Value: v,
-			}
-			err = nvc.CheckNamedValue(nv)
-			if err == nil {
-				return nv.Value, nil
-			}
+		nv := &driver.NamedValue{
+			Value: v,
+		}
+		err = nvc.CheckNamedValue(nv)
+		if err == nil {
+			return nv.Value, nil
 		}
 	}
 	if err != nil {
