@@ -15,19 +15,12 @@ var (
 type Operation int
 
 const (
-	ExecAction Operation = iota
-	PrepareAction
-	SelectAction
-	SelectOneAction
-	SelectScanAction
-	ExecNoResultAction
-)
-
-type LoadType int
-
-const (
-	LoadXML LoadType = iota
-	LoadComment
+	execAction Operation = iota
+	prepareAction
+	selectAction
+	selectOneAction
+	selectScanAction
+	execNoResultAction
 )
 
 var MaxStackLen = 50

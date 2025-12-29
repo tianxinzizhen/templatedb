@@ -93,7 +93,7 @@ func makeDBFuncContext(t reflect.Type, tdb *TgenSql, action Operation, templateS
 		}
 		var changeOp func(op *funcExecOption) (bool, error)
 		if op.option&optionBatchInsert != 0 {
-			if action != ExecNoResultAction {
+			if action != execNoResultAction {
 				err = errors.New("batch insert only support exec no result action")
 				handleErr()
 				return results
@@ -128,7 +128,7 @@ func makeDBFuncContext(t reflect.Type, tdb *TgenSql, action Operation, templateS
 			return results
 		}
 		switch action {
-		case ExecAction:
+		case execAction:
 			var ret sql.Result
 			ret, err = tdb.exec(op)
 			if err != nil {
@@ -143,7 +143,7 @@ func makeDBFuncContext(t reflect.Type, tdb *TgenSql, action Operation, templateS
 					}
 				}
 			}
-		case SelectAction:
+		case selectAction:
 			op.result = results
 			if hasReturnErr {
 				op.result = results[:len(results)-1]
@@ -153,7 +153,7 @@ func makeDBFuncContext(t reflect.Type, tdb *TgenSql, action Operation, templateS
 				handleErr()
 				return results
 			}
-		case SelectOneAction:
+		case selectOneAction:
 			op.result = results
 			if hasReturnErr {
 				op.result = results[:len(results)-1]
@@ -163,7 +163,7 @@ func makeDBFuncContext(t reflect.Type, tdb *TgenSql, action Operation, templateS
 				handleErr()
 				return results
 			}
-		case ExecNoResultAction:
+		case execNoResultAction:
 			if op.option&optionBatchInsert != 0 {
 				stmtMap := map[string]*sql.Stmt{}
 				var preSql string
@@ -294,15 +294,15 @@ func InitDBFunc(tdb *TgenSql, dest any) error {
 						}
 					}
 				}
-				var action Operation = ExecNoResultAction
+				var action Operation = execNoResultAction
 				if fct.NumOut() > 0 {
 					if fct.Out(0) == sqlResultType {
-						action = ExecAction
+						action = execAction
 					} else if !fct.Out(0).Implements(errorType) {
 						if fct.Out(0).Kind() == reflect.Slice {
-							action = SelectAction
+							action = selectAction
 						} else {
-							action = SelectOneAction
+							action = selectOneAction
 						}
 					}
 				}
