@@ -1,4 +1,4 @@
-package templatedb
+package tgsql
 
 import (
 	"context"
@@ -6,91 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime"
-	"strings"
 
-	"github.com/tianxinzizhen/templatedb/load"
-	"github.com/tianxinzizhen/templatedb/template"
+	"github.com/tianxinzizhen/tgsql/load"
+	"github.com/tianxinzizhen/tgsql/template"
 )
-
-type enableSqlTxKey struct{}
-type sqlTxKey struct{}
-
-func NewSqlTx(ctx context.Context, tx *sql.Tx) context.Context {
-	ctx = context.WithValue(ctx, enableSqlTxKey{}, true)
-	return context.WithValue(ctx, sqlTxKey{}, tx)
-}
-
-func GetEnableSqlTx(ctx context.Context) bool {
-	if enable, ok := ctx.Value(enableSqlTxKey{}).(bool); ok && enable {
-		return true
-	}
-	return false
-}
-
-func FromSqlTx(ctx context.Context) (tx *sql.Tx, ok bool) {
-	tx, ok = ctx.Value(sqlTxKey{}).(*sql.Tx)
-	return
-}
-
-func recoverLog(err error) *DBFuncPanicError {
-	if err != nil {
-		var pc []uintptr = make([]uintptr, MaxStackLen)
-		n := runtime.Callers(3, pc[:])
-		frames := runtime.CallersFrames(pc[:n])
-		sb := strings.Builder{}
-		sb.WriteString(fmt.Sprintf("%v \n", err))
-		for frame, more := frames.Next(); more; frame, more = frames.Next() {
-			sb.WriteString(fmt.Sprintf("%s:%d \n", frame.File, frame.Line))
-		}
-		msg := sb.String()
-		return &DBFuncPanicError{msg: msg, err: err}
-	}
-	return nil
-}
-func funcErr(funcName string, err error) *DBFuncError {
-	if err != nil {
-		var pc []uintptr = make([]uintptr, 2)
-		n := runtime.Callers(3, pc)
-		frames := runtime.CallersFrames(pc[:n])
-		var msg string
-		for frame, more := frames.Next(); more; frame, more = frames.Next() {
-			msg = fmt.Sprintf("%s:%d", frame.File, frame.Line)
-		}
-		return &DBFuncError{funcName: funcName, funcFileLine: msg, err: err}
-	}
-	return nil
-}
-
-type DBFuncPanicError struct {
-	msg string
-	err error
-}
-
-func (e *DBFuncPanicError) Error() string {
-	return e.msg
-}
-
-func (e *DBFuncPanicError) Unwrap() error {
-	return e.err
-}
-
-type DBFuncError struct {
-	funcName     string
-	funcFileLine string
-	err          error
-}
-
-func (e *DBFuncError) Error() string {
-	if e.err != nil {
-		return fmt.Sprintf("%s FuncName:%s An error has occurred [%s]", e.funcFileLine, e.funcName, e.err.Error())
-	}
-	return e.funcName
-}
-
-func (e *DBFuncError) Unwrap() error {
-	return e.err
-}
 
 func handleParam(sqlInfo *load.SqlDataInfo, op *funcExecOption, args []reflect.Value) {
 	var opArgs []any
@@ -131,7 +50,7 @@ func handleParam(sqlInfo *load.SqlDataInfo, op *funcExecOption, args []reflect.V
 	}
 }
 
-func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template, sqlInfo *load.SqlDataInfo) reflect.Value {
+func makeDBFuncContext(t reflect.Type, tdb *TgenSql, action Operation, templateSql *template.Template, sqlInfo *load.SqlDataInfo) reflect.Value {
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
 		var err error
 		var hasReturnErr bool
@@ -299,33 +218,44 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 	})
 }
 
-func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql any) error {
-	dv := reflect.ValueOf(dbFuncStruct)
+func checkAllDBFuncSet(tdb *TgenSql, dv reflect.Value) error {
 	for dv.Kind() == reflect.Pointer {
 		dv = dv.Elem()
 	}
 	if !dv.IsValid() {
-		return errors.New("DBFuncContextInit in(dbFuncStruct) is not valid")
+		return errors.New("checkAllDBFuncSet in(dbFuncStruct) is not valid")
+	}
+	dt := dv.Type()
+	tgsv := reflect.ValueOf(tdb)
+	for i := 0; i < dv.NumField(); i++ {
+		f := dv.Field(i)
+		ft := f.Type()
+		if ft.Kind() == reflect.Func {
+			if f.IsNil() {
+				return fmt.Errorf("%s method:%s is not have a sql statement", dt.Name(), dt.Field(i).Name)
+			}
+		} else if ft == tgsv.Type() {
+			f.Set(tgsv)
+		}
+	}
+	return nil
+}
+
+func InitDBFunc(tdb *TgenSql, dest any) error {
+	dv := reflect.ValueOf(dest)
+	for dv.Kind() == reflect.Pointer {
+		dv = dv.Elem()
+	}
+	if !dv.IsValid() {
+		return errors.New("NewDBFunc in(dbFuncStruct) is not valid")
 	}
 	dt := dv.Type()
 	tp := template.New(dt.Name()).Delims(tdb.leftDelim, tdb.rightDelim).
 		Funcs(tdb.sqlFunc)
-	var sqlInfos []*load.SqlDataInfo
-	var err error
-	//添加数据信息
-	switch lt {
-	case LoadXML:
-		sqlInfos, err = load.LoadXml(dt.PkgPath(), sql)
-		if err != nil {
-			return err
-		}
-	case LoadComment:
-		sqlInfos, err = load.LoadComment(dt.PkgPath(), sql)
-		if err != nil {
-			return err
-		}
-	default:
-		return errors.New("DBFuncContextInit not load sql script data")
+	fkey := fmt.Sprintf("%s.%s", dt.PkgPath(), dt.Name())
+	sqlInfos := tdb.localFuncDataInfo.GetSqlDataInfo(fkey)
+	if len(sqlInfos) == 0 {
+		return fmt.Errorf("NewDBFunc not found sql script data in type %s", dt.Name())
 	}
 	for _, sqlInfo := range sqlInfos {
 		_, err := tp.AddParse(sqlInfo.Name, sqlInfo.Sql)
@@ -347,7 +277,7 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 					}
 					switch ditIni.Kind() {
 					case reflect.Func, reflect.Chan:
-						return fmt.Errorf("DBFuncContextInit in(%d) type not support %s", i, ditIni.Kind().String())
+						return fmt.Errorf("NewDBFunc in(%d) type not support %s", i, ditIni.Kind().String())
 					}
 				}
 				for i := 0; i < fct.NumOut(); i++ {
@@ -357,10 +287,10 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 					}
 					switch ditIni.Kind() {
 					case reflect.Func, reflect.Chan:
-						return fmt.Errorf("DBFuncContextInit out(%d) type not support %s", i, ditIni.Kind().String())
+						return fmt.Errorf("NewDBFunc out(%d) type not support %s", i, ditIni.Kind().String())
 					case reflect.Interface:
 						if !ditIni.Implements(sqlResultType) {
-							return fmt.Errorf("DBFuncContextInit out(%d) type not support Interface", i)
+							return fmt.Errorf("NewDBFunc out(%d) type not support Interface", i)
 						}
 					}
 				}
@@ -381,14 +311,9 @@ func DBFuncContextInit(tdb *DBFuncTemplateDB, dbFuncStruct any, lt LoadType, sql
 		}
 	}
 	//check the method of initialization
-	for i := 0; i < dv.NumField(); i++ {
-		f := dv.Field(i)
-		ft := f.Type()
-		if ft.Kind() == reflect.Func {
-			if f.IsNil() {
-				return fmt.Errorf("%s method:%s is not have a sql statement", dt.Name(), dt.Field(i).Name)
-			}
-		}
+	err := checkAllDBFuncSet(tdb, dv)
+	if err != nil {
+		return err
 	}
 	return nil
 }

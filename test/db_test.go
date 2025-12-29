@@ -3,22 +3,31 @@ package test
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/tianxinzizhen/templatedb"
-	"github.com/tianxinzizhen/templatedb/sqlval"
+	"github.com/tianxinzizhen/tgsql"
+	"github.com/tianxinzizhen/tgsql/sqlval"
 )
 
-func GetDBFuncTemplateDB() (*templatedb.DBFuncTemplateDB, error) {
+//go:embed *
+var testDbSql embed.FS
+
+func GetDBFuncTemplateDB() (*tgsql.TgenSql, error) {
 	sqldb, err := sql.Open("mysql", "lix:lix@1234@tcp(localhost:3306)/lix_test?charset=utf8mb4&parseTime=True&loc=Local")
 	if err != nil {
 		return nil, err
 	}
-	return templatedb.NewDBFuncTemplateDB(sqldb), nil
+	tdb := tgsql.NewTgenSql(sqldb)
+	err = tdb.LoadFuncDataInfo(testDbSql)
+	if err != nil {
+		return nil, err
+	}
+	return tdb, nil
 }
 
 func TestSelect(t *testing.T) {

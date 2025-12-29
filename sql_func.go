@@ -1,4 +1,4 @@
-package templatedb
+package tgsql
 
 import (
 	"encoding/json"
@@ -6,10 +6,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/tianxinzizhen/templatedb/sqlwrite"
-	"github.com/tianxinzizhen/templatedb/template"
+	"github.com/tianxinzizhen/tgsql/sqlwrite"
+	"github.com/tianxinzizhen/tgsql/template"
 
-	"github.com/tianxinzizhen/templatedb/util"
+	"github.com/tianxinzizhen/tgsql/util"
 )
 
 var sqlFunc template.FuncMap = make(template.FuncMap)

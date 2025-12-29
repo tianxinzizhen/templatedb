@@ -1,4 +1,4 @@
-module github.com/tianxinzizhen/templatedb
+module github.com/tianxinzizhen/tgsql
 
 go 1.23
 

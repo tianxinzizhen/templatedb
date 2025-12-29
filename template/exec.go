@@ -14,9 +14,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/tianxinzizhen/templatedb/template/parse"
+	"github.com/tianxinzizhen/tgsql/template/parse"
 
-	"github.com/tianxinzizhen/templatedb/sqlwrite"
+	"github.com/tianxinzizhen/tgsql/sqlwrite"
 )
 
 // maxExecDepth specifies the maximum stack depth of templates within

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"unicode"
 
-	"github.com/tianxinzizhen/templatedb/template/parse"
+	"github.com/tianxinzizhen/tgsql/template/parse"
 )
 
 // common holds the information shared by related templates.

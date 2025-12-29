@@ -3,9 +3,8 @@ package test
 import (
 	"context"
 	"database/sql"
-	"embed"
 
-	"github.com/tianxinzizhen/templatedb"
+	"github.com/tianxinzizhen/tgsql"
 )
 
 /*
@@ -62,7 +61,7 @@ type TestDB struct {
 	SelectAtSignByTestInfo func(ctx context.Context, testInfo *Test) ([]*Test, error)
 
 	/*sql
-	insert into test2 values(@id,@name,@:extend)
+	insert into test2 values(@id,@name,@extend)
 	*/
 	Insert2 func(ctx context.Context, testInfo *Test2) (sql.Result, error)
 
@@ -87,12 +86,9 @@ type TestDB struct {
 	UpdateNotResultId func(ctx context.Context, testInfo *Test) error
 }
 
-//go:embed test_db.go
-var testDbSql embed.FS
-
-func NewTestDB(tdb *templatedb.DBFuncTemplateDB) (*TestDB, error) {
+func NewTestDB(tdb *tgsql.TgenSql) (*TestDB, error) {
 	ret := &TestDB{}
-	err := templatedb.DBFuncContextInit(tdb, ret, templatedb.LoadComment, testDbSql)
+	err := tgsql.InitDBFunc(tdb, ret)
 	if err != nil {
 		return nil, err
 	}

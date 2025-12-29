@@ -51,7 +51,8 @@ func localConvertVal(v reflect.Value) []reflect.Value {
 func ConvertValue(ci any, v any) (any, error) {
 	var err error
 	nvc, _ := ci.(driver.NamedValueChecker)
-	if nvc != nil {
+	switch {
+	case nvc != nil:
 		nv := &driver.NamedValue{
 			Value: v,
 		}
@@ -59,18 +60,20 @@ func ConvertValue(ci any, v any) (any, error) {
 		if err == nil {
 			return nv.Value, nil
 		}
-	}
-	if err != nil {
-		v, err = driver.DefaultParameterConverter.ConvertValue(v)
-	}
-	if err != nil {
-		ret := localConvertVal(reflect.ValueOf(v))
-		if ret[1].IsValid() {
-			return ret[0].Interface(), ret[1].Interface().(error)
+		fallthrough
+	default:
+		var cv driver.Value
+		cv, err = driver.DefaultParameterConverter.ConvertValue(v)
+		if err == nil {
+			return cv, nil
+		} else {
+			ret := localConvertVal(reflect.ValueOf(v))
+			if ret[1].IsValid() {
+				return ret[0].Interface(), ret[1].Interface().(error)
+			}
+			return ret[0].Interface(), nil
 		}
-		return ret[0].Interface(), nil
 	}
-	return v, nil
 }
 
 func ConvertValues(ci any, args []any) ([]any, error) {

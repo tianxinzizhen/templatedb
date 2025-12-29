@@ -1,4 +1,4 @@
-package templatedb
+package tgsql
 
 import (
 	"context"

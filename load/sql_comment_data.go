@@ -1,7 +1,6 @@
 package load
 
 import (
-	"embed"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -11,6 +10,7 @@ import (
 )
 
 type SqlDataInfo struct {
+	TypeName    string
 	FuncName    string
 	Name        string
 	Sql         string
@@ -19,49 +19,7 @@ type SqlDataInfo struct {
 	Param       []string
 }
 
-func LoadComment(pkg string, sql any) ([]*SqlDataInfo, error) {
-	switch v := sql.(type) {
-	case embed.FS:
-		return LoadCommentEmbedFS(pkg, v)
-	case string:
-		return LoadCommentString(pkg, v)
-	case []byte:
-		return LoadCommentBytes(pkg, v)
-	default:
-		return nil, errors.New("comment sql type load data not support")
-	}
-}
-func LoadCommentEmbedFS(pkg string, sqlDir embed.FS) ([]*SqlDataInfo, error) {
-	files, err := sqlDir.ReadDir(".")
-	if err != nil {
-		return nil, err
-	}
-	dirName := ""
-	if files[0].IsDir() {
-		dirName = files[0].Name() + "/"
-		files, err = sqlDir.ReadDir(files[0].Name())
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sqlDataInfos []*SqlDataInfo
-	for _, fileInfo := range files {
-		if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ".go") {
-			bytes, err := sqlDir.ReadFile(dirName + fileInfo.Name())
-			if err != nil {
-				return nil, err
-			}
-			infos, err := LoadCommentBytes(pkg, bytes)
-			if err != nil {
-				return nil, err
-			}
-			sqlDataInfos = append(sqlDataInfos, infos...)
-		}
-	}
-	return sqlDataInfos, nil
-}
-
-func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
+func loadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 	if bytes == nil {
 		return nil, errors.New("sql go bytes is nil")
 	}
@@ -90,7 +48,9 @@ func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 										if len(sql) == 0 {
 											continue
 										}
+
 										sqlDataInfo := &SqlDataInfo{
+											TypeName: fmt.Sprintf("%s.%s", pkg, typeSpec.Name.String()),
 											Name:     field.Names[0].String(),
 											FuncName: fmt.Sprintf("%s.%s.%s:", pkg, typeSpec.Name.String(), field.Names[0].String()),
 											Sql:      sql,
@@ -144,6 +104,6 @@ func LoadCommentBytes(pkg string, bytes []byte) ([]*SqlDataInfo, error) {
 	return sqlDataInfos, nil
 }
 
-func LoadCommentString(pkg string, sqlComments string) ([]*SqlDataInfo, error) {
-	return LoadCommentBytes(pkg, []byte(sqlComments))
+func loadCommentString(pkg string, sqlComments string) ([]*SqlDataInfo, error) {
+	return loadCommentBytes(pkg, []byte(sqlComments))
 }

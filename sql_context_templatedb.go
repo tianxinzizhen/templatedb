@@ -1,4 +1,4 @@
-package templatedb
+package tgsql
 
 import (
 	"context"
@@ -12,7 +12,7 @@ type SqlTemplate[T any] struct {
 	Param any
 }
 
-func (st SqlTemplate[T]) Query(tdb *DBFuncTemplateDB) (T, error) {
+func (st SqlTemplate[T]) Query(tdb *TgenSql) (T, error) {
 	op := &funcExecOption{
 		db: tdb.db,
 	}
@@ -41,7 +41,7 @@ func (st SqlTemplate[T]) Query(tdb *DBFuncTemplateDB) (T, error) {
 	return op.result[0].Interface().(T), nil
 }
 
-func (st SqlTemplate[T]) Exec(tdb *DBFuncTemplateDB) (sql.Result, error) {
+func (st SqlTemplate[T]) Exec(tdb *TgenSql) (sql.Result, error) {
 	op := &funcExecOption{
 		db: tdb.db,
 	}
