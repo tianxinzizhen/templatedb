@@ -46,9 +46,6 @@ type TestDB struct {
 	*/
 	SelectOneNoReturnErr func(ctx context.Context, id int) *Test
 
-	// ----parameter is point
-
-	// 如果比较符在前面是字段名称,那么默认取该名称参数,否则按参数顺序取
 	/*sql
 	select * from test where id=@id and name=@name
 	*/
