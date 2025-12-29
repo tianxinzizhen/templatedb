@@ -1,4 +1,4 @@
-package scan
+package sqlval
 
 import (
 	"database/sql"

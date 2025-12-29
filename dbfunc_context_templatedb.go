@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"runtime"
 
-	"github.com/tianxinzizhen/templatedb/scan"
+	"github.com/tianxinzizhen/templatedb/sqlval"
 	"github.com/tianxinzizhen/templatedb/sqlwrite"
 	"github.com/tianxinzizhen/templatedb/template"
 	"github.com/tianxinzizhen/templatedb/util"
@@ -79,6 +79,19 @@ type funcExecOption struct {
 	args   []any
 	option int
 	offset int
+	db     any
+	stmt   *sql.Stmt
+}
+
+func (op *funcExecOption) GetDB(ctx context.Context) any {
+	if op.stmt != nil {
+		return op.stmt
+	}
+	tx, ok := FromSqlTx(ctx)
+	if ok && tx != nil {
+		return tx
+	}
+	return op.db
 }
 
 type keyLogSqlFuncName struct{}
@@ -95,29 +108,35 @@ func (tdb *DBFuncTemplateDB) templateBuild(templateSql *template.Template, op *f
 		return err
 	}
 	if op.option&OptionNotPrepare != 0 {
-		op.sql, err = util.InterpolateParams(sqlWrite.String(), sqlWrite.Args, tdb.SqlEscapeBytesBackslash)
+		op.sql, err = util.InterpolateParams(sqlWrite.Sql(), sqlWrite.Args(), tdb.SqlEscapeBytesBackslash)
 		if err != nil {
 			return err
 		}
 		op.args = nil
 	} else {
-		op.sql = sqlWrite.String()
-		op.args = sqlWrite.Args
+		op.sql = sqlWrite.Sql()
+		op.args = sqlWrite.Args()
 	}
 	tdb.sqlPrintAndRecord(op.ctx, templateSql.Name(), op.sql, op.args)
 	return err
 }
-func (tdb *DBFuncTemplateDB) query(db sqlDB, op *funcExecOption) error {
-	return tdb.queryOption(db, op, queryOption{})
+func (tdb *DBFuncTemplateDB) query(op *funcExecOption) error {
+	return tdb.queryOption(op, queryOption{})
 }
 
 type queryOption struct {
 	selectOne bool
 }
 
-func (tdb *DBFuncTemplateDB) queryOption(db sqlDB, op *funcExecOption, queryOption queryOption) error {
+func (tdb *DBFuncTemplateDB) queryOption(op *funcExecOption, queryOption queryOption) error {
 	if op.ctx == nil {
 		op.ctx = context.Background()
+	}
+	db := op.GetDB(op.ctx).(sqlDB)
+	var err error
+	op.args, err = sqlval.ConvertValues(op.db, op.args)
+	if err != nil {
+		return err
 	}
 	rows, err := db.QueryContext(op.ctx, op.sql, op.args...)
 	if err != nil {
@@ -129,7 +148,7 @@ func (tdb *DBFuncTemplateDB) queryOption(db sqlDB, op *funcExecOption, queryOpti
 		return err
 	}
 	for rows.Next() {
-		dest, df, err := scan.GetScanDest(tdb.filedName, columns, op.result)
+		dest, df, err := sqlval.GetScanDest(tdb.filedName, columns, op.result)
 		if err != nil {
 			return err
 		}
@@ -147,26 +166,43 @@ func (tdb *DBFuncTemplateDB) queryOption(db sqlDB, op *funcExecOption, queryOpti
 	return nil
 }
 
-func (tdb *DBFuncTemplateDB) exec(db sqlDB, op *funcExecOption) (ret sql.Result, err error) {
+func (tdb *DBFuncTemplateDB) exec(op *funcExecOption) (ret sql.Result, err error) {
 	if op.ctx == nil {
 		op.ctx = context.Background()
 	}
-	result, err := db.ExecContext(op.ctx, op.sql, op.args...)
-	if err != nil {
-		return nil, err
+	switch db := op.GetDB(op.ctx).(type) {
+	case sqlDB:
+		op.args, err = sqlval.ConvertValues(op.db, op.args)
+		if err != nil {
+			return nil, err
+		}
+		result, err := db.ExecContext(op.ctx, op.sql, op.args...)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	case sqlStmt:
+		result, err := db.ExecContext(op.ctx, op.args...)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
-	return result, nil
+	return nil, errors.New("db not support exec")
 }
 
-func (tdb *DBFuncTemplateDB) prepareContext(db sqlDB, op *funcExecOption) (ret *sql.Stmt, err error) {
+func (tdb *DBFuncTemplateDB) prepareContext(op *funcExecOption) (ret *sql.Stmt, err error) {
 	if op.ctx == nil {
 		op.ctx = context.Background()
 	}
-	result, err := db.PrepareContext(op.ctx, op.sql)
-	if err != nil {
-		return nil, err
+	if db, ok := op.GetDB(op.ctx).(sqlPrepare); ok {
+		result, err := db.PrepareContext(op.ctx, op.sql)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
-	return result, nil
+	return nil, errors.New("db not support prepare")
 }
 
 type recoverPanic struct{}
@@ -320,8 +356,8 @@ func (tdb *DBFuncTemplateDB) sqlTemplateBuild(ctx context.Context, tsql string, 
 	if err != nil {
 		return "", nil, err
 	}
-	tdb.sqlPrintAndRecord(ctx, fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line), sqw.String(), sqw.Args)
-	return sqw.String(), sqw.Args, err
+	tdb.sqlPrintAndRecord(ctx, fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line), sqw.Sql(), sqw.Args())
+	return sqw.Sql(), sqw.Args(), err
 }
 
 func (tdb *DBFuncTemplateDB) sqlPrintAndRecord(ctx context.Context, sqlFuncName, sql string, args []any) {

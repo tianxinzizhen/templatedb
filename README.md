@@ -1,8 +1,2 @@
-# Introduction
-SQL is dynamically generated using SQL templates and parameters, which can provide more complex SQL operations with templates
-
-
-# How to use
-
-# 安全相关
-[![Security Status](https://www.murphysec.com/platform3/v3/badge/1612004657648414720.svg?t=1)](https://www.murphysec.com/accept?code=decf9bb2d4c69750e880241c395edbd7&type=1&from=2&t=2)
+这个项目是一个基于Go语言的SQL模板库，它可以帮助你在Go项目中使用SQL模板来动态生成SQL语句。
+原生支持Go语言的数据库操作接口，你可以直接使用它来执行SQL语句。

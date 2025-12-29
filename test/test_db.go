@@ -25,7 +25,7 @@ type TestDB struct {
 	*/
 	Insert func(ctx context.Context, testInfo *Test) (sql.Result, error)
 
-	//sql select * from test where [id=@id]
+	//sql select * from test where 1 [and id=@id]
 	Select func(ctx context.Context, id int) (IdScan, string, error)
 
 	//sql select * from test2 where id=?

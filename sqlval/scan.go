@@ -1,4 +1,4 @@
-package scan
+package sqlval
 
 import (
 	"database/sql"
@@ -15,20 +15,17 @@ type ScanVal[T any] interface {
 var localScanVal = make(map[reflect.Type]reflect.Type)
 
 func RegisterScanVal[T any](sv ScanVal[T]) error {
-	if reflect.TypeOf(sv.Val()).Kind() == reflect.Pointer {
+	if reflect.TypeFor[T]().Kind() == reflect.Pointer {
 		return fmt.Errorf("sv.Val() must be not pointer")
 	}
-	if reflect.TypeOf(sv.ValPtr()).Kind() != reflect.Pointer {
-		return fmt.Errorf("sv.ValPtr() must be pointer")
-	}
-	if _, ok := localScanVal[reflect.TypeOf(sv.Val())]; ok {
+	if _, ok := localScanVal[reflect.TypeFor[T]()]; ok {
 		return fmt.Errorf("sv.Val() type already registered")
 	}
-	if _, ok := localScanVal[reflect.TypeOf(sv.ValPtr())]; ok {
+	if _, ok := localScanVal[reflect.TypeFor[*T]()]; ok {
 		return fmt.Errorf("sv.ValPtr() type already registered")
 	}
-	localScanVal[reflect.TypeOf(sv.Val())] = reflect.TypeOf(sv).Elem()
-	localScanVal[reflect.TypeOf(sv.ValPtr())] = reflect.TypeOf(sv).Elem()
+	localScanVal[reflect.TypeFor[T]()] = reflect.TypeOf(sv).Elem()
+	localScanVal[reflect.TypeFor[*T]()] = reflect.TypeOf(sv).Elem()
 	return nil
 }
 

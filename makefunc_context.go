@@ -13,14 +13,23 @@ import (
 	"github.com/tianxinzizhen/templatedb/template"
 )
 
-type keySqlTx struct{}
+type enableSqlTxKey struct{}
+type sqlTxKey struct{}
 
 func NewSqlTx(ctx context.Context, tx *sql.Tx) context.Context {
-	return context.WithValue(ctx, keySqlTx{}, tx)
+	ctx = context.WithValue(ctx, enableSqlTxKey{}, true)
+	return context.WithValue(ctx, sqlTxKey{}, tx)
+}
+
+func GetEnableSqlTx(ctx context.Context) bool {
+	if enable, ok := ctx.Value(enableSqlTxKey{}).(bool); ok && enable {
+		return true
+	}
+	return false
 }
 
 func FromSqlTx(ctx context.Context) (tx *sql.Tx, ok bool) {
-	tx, ok = ctx.Value(keySqlTx{}).(*sql.Tx)
+	tx, ok = ctx.Value(sqlTxKey{}).(*sql.Tx)
 	return
 }
 
@@ -83,70 +92,57 @@ func (e *DBFuncError) Unwrap() error {
 	return e.err
 }
 
-func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template, sqlInfo *load.SqlDataInfo) reflect.Value {
-	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
-		op := &funcExecOption{}
-		if sqlInfo.NotPrepare {
-			op.option |= OptionNotPrepare
-		}
-		// 批量执行
-		if sqlInfo.BatchInsert {
-			op.option |= OptionBatchInsert
-		}
-		var opArgs []any
-		var useMultiParam bool
-		for _, v := range args {
-			val := v.Interface()
-			opArgs = append(opArgs, val)
-			if v.Type().Implements(contextType) {
-				if val != nil {
-					op.ctx = val.(context.Context)
-				}
-			} else {
-				pvt := v.Type()
-				if pvt.Kind() == reflect.Pointer {
-					pvt = pvt.Elem()
-				}
-				switch pvt.Kind() {
-				case reflect.Map, reflect.Slice, reflect.Struct:
-					if op.param == nil {
-						op.param = val
-					} else {
-						useMultiParam = true
-					}
-				default:
+func handleParam(sqlInfo *load.SqlDataInfo, op *funcExecOption, args []reflect.Value) {
+	var opArgs []any
+	var useMultiParam bool
+	for _, v := range args {
+		val := v.Interface()
+		opArgs = append(opArgs, val)
+		if v.Type().Implements(contextType) {
+			if val != nil {
+				op.ctx = val.(context.Context)
+			}
+		} else {
+			pvt := v.Type()
+			if pvt.Kind() == reflect.Pointer {
+				pvt = pvt.Elem()
+			}
+			switch pvt.Kind() {
+			case reflect.Map, reflect.Slice, reflect.Struct:
+				if op.param == nil {
+					op.param = val
+				} else {
 					useMultiParam = true
 				}
+			default:
+				useMultiParam = true
 			}
 		}
-		if useMultiParam && len(sqlInfo.Param) > 0 {
-			paramMap := map[string]any{}
-			for i, v := range sqlInfo.Param {
-				if reflect.ValueOf(opArgs[i]).Type().Implements(contextType) {
-					continue
-				}
-				paramMap[v] = opArgs[i]
+	}
+	if useMultiParam && len(sqlInfo.Param) > 0 {
+		paramMap := map[string]any{}
+		for i, v := range sqlInfo.Param {
+			if reflect.ValueOf(opArgs[i]).Type().Implements(contextType) {
+				continue
 			}
-			op.param = paramMap
+			paramMap[v] = opArgs[i]
 		}
-		var db sqlDB = tdb.db
-		if op.ctx == nil {
-			op.ctx = context.Background()
-		} else {
-			tx, ok := FromSqlTx(op.ctx)
-			if ok && tx != nil {
-				db = tx
-			}
-		}
-		results = make([]reflect.Value, t.NumOut())
-		for i := 0; i < t.NumOut(); i++ {
-			results[i] = reflect.Zero(t.Out(i))
-		}
+		op.param = paramMap
+	}
+}
+
+func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, templateSql *template.Template, sqlInfo *load.SqlDataInfo) reflect.Value {
+	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
+		var err error
 		var hasReturnErr bool
 		if t.NumOut() > 0 {
 			hasReturnErr = t.Out(t.NumOut() - 1).Implements(errorType)
 		}
-		var err error
+		op := &funcExecOption{
+			ctx: context.Background(), // default ctx
+		}
+		// 处理参数
+		handleParam(sqlInfo, op, args)
 		handleErr := func() {
 			if hasReturnErr {
 				results[t.NumOut()-1] = reflect.ValueOf(funcErr(sqlInfo.FuncName, err))
@@ -154,6 +150,27 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 				tdb.enableRecover(op.ctx)
 				panic(recoverLog(err))
 			}
+		}
+		if !GetEnableSqlTx(op.ctx) {
+			var conn *sql.Conn
+			conn, err = tdb.db.Conn(op.ctx)
+			if err != nil {
+				handleErr()
+				return results
+			}
+			defer conn.Close()
+			op.db = conn
+		}
+		if sqlInfo.NotPrepare {
+			op.option |= OptionNotPrepare
+		}
+		// 批量执行
+		if sqlInfo.BatchInsert {
+			op.option |= OptionBatchInsert
+		}
+		results = make([]reflect.Value, t.NumOut())
+		for i := 0; i < t.NumOut(); i++ {
+			results[i] = reflect.Zero(t.Out(i))
 		}
 		var changeOp func(op *funcExecOption) (bool, error)
 		if op.option&OptionBatchInsert != 0 {
@@ -194,7 +211,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 		switch action {
 		case ExecAction:
 			var ret sql.Result
-			ret, err = tdb.exec(db, op)
+			ret, err = tdb.exec(op)
 			if err != nil {
 				handleErr()
 				return results
@@ -212,7 +229,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			if hasReturnErr {
 				op.result = results[:len(results)-1]
 			}
-			err = tdb.query(db, op)
+			err = tdb.query(op)
 			if err != nil {
 				handleErr()
 				return results
@@ -222,7 +239,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 			if hasReturnErr {
 				op.result = results[:len(results)-1]
 			}
-			err = tdb.queryOption(db, op, queryOption{selectOne: true})
+			err = tdb.queryOption(op, queryOption{selectOne: true})
 			if err != nil {
 				handleErr()
 				return results
@@ -246,21 +263,20 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 						return results
 					}
 					if preSql != op.sql {
-						if s, ok := stmtMap[preSql]; ok {
-							if s != nil {
-								s.Close()
+						if _, ok := stmtMap[preSql]; !ok {
+							var stmt *sql.Stmt
+							stmt, err = tdb.prepareContext(op)
+							if err != nil {
+								handleErr()
+								return results
 							}
+							preSql = op.sql
+							stmtMap[preSql] = stmt
+							op.stmt = stmt
 						}
-						var stmt *sql.Stmt
-						stmt, err = tdb.prepareContext(db, op)
-						if err != nil {
-							handleErr()
-							return results
-						}
-						preSql = op.sql
-						stmtMap[preSql] = stmt
 					}
 					if stmt, ok := stmtMap[op.sql]; ok {
+						op.stmt = stmt
 						_, err = stmt.ExecContext(op.ctx, op.args...)
 						if err != nil {
 							handleErr()
@@ -272,7 +288,7 @@ func makeDBFuncContext(t reflect.Type, tdb *DBFuncTemplateDB, action Operation, 
 					}
 				}
 			} else {
-				_, err = tdb.exec(db, op)
+				_, err = tdb.exec(op)
 				if err != nil {
 					handleErr()
 					return results

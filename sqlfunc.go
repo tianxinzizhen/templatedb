@@ -16,18 +16,18 @@ var sqlFunc template.FuncMap = make(template.FuncMap)
 
 func init() {
 	//sql 函数的加载
-	AddTemplateFunc("comma", comma)
-	AddTemplateFunc("like", like)
-	AddTemplateFunc("liker", likeRight)
-	AddTemplateFunc("likel", likeLeft)
-	AddTemplateFunc("param", params)
-	AddTemplateFunc("marshal", marshal)
-	AddTemplateFunc("json", marshal)
-	AddTemplateFunc("in", inParameter)
-	AddTemplateFunc("set", setParameter)
+	RegisterTemplateFunc("comma", comma)
+	RegisterTemplateFunc("like", like)
+	RegisterTemplateFunc("liker", likeRight)
+	RegisterTemplateFunc("likel", likeLeft)
+	RegisterTemplateFunc("param", params)
+	RegisterTemplateFunc("marshal", marshal)
+	RegisterTemplateFunc("json", marshal)
+	RegisterTemplateFunc("in", inParameter)
+	RegisterTemplateFunc("set", setParameter)
 }
 
-func AddTemplateFunc(key string, funcMethod any) error {
+func RegisterTemplateFunc(key string, funcMethod any) error {
 	if _, ok := sqlFunc[key]; ok {
 		return fmt.Errorf("add template func[%s] already exists ", key)
 	} else {

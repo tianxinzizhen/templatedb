@@ -10,7 +10,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/tianxinzizhen/templatedb"
-	"github.com/tianxinzizhen/templatedb/scan"
+	"github.com/tianxinzizhen/templatedb/sqlval"
 )
 
 func GetDBFuncTemplateDB() (*templatedb.DBFuncTemplateDB, error) {
@@ -22,7 +22,7 @@ func GetDBFuncTemplateDB() (*templatedb.DBFuncTemplateDB, error) {
 }
 
 func TestSelect(t *testing.T) {
-	scan.RegisterScanVal(&IdScan{})
+	sqlval.RegisterScanVal(&IdScan{})
 	tdb, err := GetDBFuncTemplateDB()
 	if err != nil {
 		t.Error(err)

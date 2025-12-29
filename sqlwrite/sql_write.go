@@ -1,23 +1,29 @@
 package sqlwrite
 
-import "strings"
+import (
+	"strings"
+)
 
 type SqlWrite struct {
-	Sql  strings.Builder
-	Args []any
+	sql  strings.Builder
+	args []any
 }
 
 func (s *SqlWrite) Write(p []byte) (n int, err error) {
-	n, err = s.Sql.Write(p)
+	n, err = s.sql.Write(p)
 	return
 }
 
-func (s *SqlWrite) String() string {
-	return s.Sql.String()
+func (s *SqlWrite) Sql() string {
+	return s.sql.String()
+}
+
+func (s *SqlWrite) Args() []any {
+	return s.args
 }
 
 func (s *SqlWrite) WriteString(str string) (n int, err error) {
-	n, err = s.Sql.WriteString(str)
+	n, err = s.sql.WriteString(str)
 	return
 }
 
@@ -26,11 +32,11 @@ func (s *SqlWrite) WriteParam(sql string, arg any) {
 		return
 	}
 	if sqw, ok := arg.(*SqlWrite); ok {
-		s.Args = append(s.Args, sqw.Args...)
-		s.Sql.WriteString(sqw.String())
+		s.args = append(s.args, sqw.Args()...)
+		s.sql.WriteString(sqw.Sql())
 		return
 	} else {
-		s.Sql.WriteString(sql)
-		s.Args = append(s.Args, arg)
+		s.sql.WriteString(sql)
+		s.args = append(s.args, arg)
 	}
 }

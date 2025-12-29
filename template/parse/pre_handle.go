@@ -102,10 +102,7 @@ func handleOption(input string, left, right string, hasFunction func(name string
 			dot := true
 			bodySb.WriteString(left)
 			for i < len(input) {
-				if v == ':' {
-					bodySb.WriteString("json ")
-					i += size
-				} else if isAlphaNumeric(v) {
+				if isAlphaNumeric(v) {
 					if dot {
 						dot = false
 						condSb.WriteByte('.')
@@ -180,10 +177,7 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 			dot := true
 			isb.WriteString(left)
 			for i < len(input) {
-				if v == ':' {
-					isb.WriteString("json ")
-					i += size
-				} else if isAlphaNumeric(v) {
+				if isAlphaNumeric(v) {
 					if dot {
 						dot = false
 						isb.WriteByte('.')

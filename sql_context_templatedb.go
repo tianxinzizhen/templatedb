@@ -13,19 +13,20 @@ type SqlTemplate[T any] struct {
 }
 
 func (st SqlTemplate[T]) Query(tdb *DBFuncTemplateDB) (T, error) {
-	op := &funcExecOption{}
+	op := &funcExecOption{
+		db: tdb.db,
+	}
 	var result T
 	op.result = append(op.result, reflect.ValueOf(result))
 	op.ctx = st.Ctx
 	op.sql = st.Sql
 	op.param = st.Param
-	var db sqlDB = tdb.db
 	if op.ctx == nil {
 		op.ctx = context.Background()
 	} else {
 		tx, ok := FromSqlTx(op.ctx)
 		if ok && tx != nil {
-			db = tx
+			op.db = tx
 		}
 	}
 	var err error
@@ -33,7 +34,7 @@ func (st SqlTemplate[T]) Query(tdb *DBFuncTemplateDB) (T, error) {
 	if err != nil {
 		return result, err
 	}
-	err = tdb.query(db, op)
+	err = tdb.query(op)
 	if err != nil {
 		return result, err
 	}
@@ -41,17 +42,18 @@ func (st SqlTemplate[T]) Query(tdb *DBFuncTemplateDB) (T, error) {
 }
 
 func (st SqlTemplate[T]) Exec(tdb *DBFuncTemplateDB) (sql.Result, error) {
-	op := &funcExecOption{}
+	op := &funcExecOption{
+		db: tdb.db,
+	}
 	op.ctx = st.Ctx
 	op.sql = st.Sql
 	op.param = st.Param
-	var db sqlDB = tdb.db
 	if op.ctx == nil {
 		op.ctx = context.Background()
 	} else {
 		tx, ok := FromSqlTx(op.ctx)
 		if ok && tx != nil {
-			db = tx
+			op.db = tx
 		}
 	}
 	var err error
@@ -59,7 +61,7 @@ func (st SqlTemplate[T]) Exec(tdb *DBFuncTemplateDB) (sql.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := tdb.exec(db, op)
+	result, err := tdb.exec(op)
 	if err != nil {
 		return nil, err
 	}
