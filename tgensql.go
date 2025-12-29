@@ -6,7 +6,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"reflect"
 	"runtime"
 
 	"github.com/tianxinzizhen/tgsql/load"
@@ -77,33 +76,10 @@ func NewTgenSql(sqlDB *sql.DB) *TgenSql {
 }
 
 const (
-	OptionNone int = 1 << iota
-	OptionNotPrepare
-	OptionBatchInsert
+	optionNone int = 1 << iota
+	optionNotPrepare
+	optionBatchInsert
 )
-
-type funcExecOption struct {
-	ctx    context.Context
-	param  any
-	result []reflect.Value
-	sql    string
-	args   []any
-	option int
-	offset int
-	db     any
-	stmt   *sql.Stmt
-}
-
-func (op *funcExecOption) GetDB(ctx context.Context) any {
-	if op.stmt != nil {
-		return op.stmt
-	}
-	tx, ok := FromSqlTx(ctx)
-	if ok && tx != nil {
-		return tx
-	}
-	return op.db
-}
 
 func (tdb *TgenSql) templateBuild(templateSql *template.Template, op *funcExecOption) error {
 	sqlWrite := &sqlwrite.SqlWrite{}
@@ -111,7 +87,7 @@ func (tdb *TgenSql) templateBuild(templateSql *template.Template, op *funcExecOp
 	if err != nil {
 		return err
 	}
-	if op.option&OptionNotPrepare != 0 {
+	if op.option&optionNotPrepare != 0 {
 		op.sql, err = util.InterpolateParams(sqlWrite.Sql(), sqlWrite.Args(), tdb.SqlEscapeBytesBackslash)
 		if err != nil {
 			return err
@@ -207,23 +183,6 @@ func (tdb *TgenSql) prepareContext(op *funcExecOption) (ret *sql.Stmt, err error
 		return result, nil
 	}
 	return nil, errors.New("db not support prepare")
-}
-
-func (tdb *TgenSql) enableRecover(ctx context.Context) {
-	if ctx != nil {
-		recoverPanic, ok := ctx.Value(recoverPanic{}).(*bool)
-		if ok {
-			*recoverPanic = true
-		}
-	}
-}
-
-func (tdb *TgenSql) FromRecover(ctx context.Context) (*bool, bool) {
-	if ctx == nil {
-		return nil, false
-	}
-	recoverPanic, ok := ctx.Value(recoverPanic{}).(*bool)
-	return recoverPanic, ok
 }
 
 func (tdb *TgenSql) ParseSql(tsql string) (*template.Template, error) {

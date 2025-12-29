@@ -6,34 +6,6 @@ import (
 	"errors"
 )
 
-type recoverPanic struct{}
-
-func (tdb *TgenSql) NewRecover(ctx context.Context) context.Context {
-	if _, ok := tdb.FromRecover(ctx); ok {
-		return ctx
-	}
-	isRecoverPanic := false
-	return context.WithValue(ctx, recoverPanic{}, &isRecoverPanic)
-}
-
-func (tdb *TgenSql) Recover(ctx context.Context, err *error) {
-	if err == nil {
-		panic(errors.New("Recover in(1) err pointer is nil"))
-	}
-	if *err == nil {
-		if rp, ok := tdb.FromRecover(ctx); ok && *rp {
-			if e := recover(); e != nil {
-				switch e := e.(type) {
-				case error:
-					*err = e
-				default:
-					panic(e)
-				}
-			}
-		}
-	}
-}
-
 type enableSqlTxKey struct{}
 type sqlTxKey struct{}
 

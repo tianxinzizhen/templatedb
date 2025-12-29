@@ -81,18 +81,18 @@ func makeDBFuncContext(t reflect.Type, tdb *TgenSql, action Operation, templateS
 			op.db = conn
 		}
 		if sqlInfo.NotPrepare {
-			op.option |= OptionNotPrepare
+			op.option |= optionNotPrepare
 		}
 		// 批量执行
 		if sqlInfo.BatchInsert {
-			op.option |= OptionBatchInsert
+			op.option |= optionBatchInsert
 		}
 		results = make([]reflect.Value, t.NumOut())
 		for i := 0; i < t.NumOut(); i++ {
 			results[i] = reflect.Zero(t.Out(i))
 		}
 		var changeOp func(op *funcExecOption) (bool, error)
-		if op.option&OptionBatchInsert != 0 {
+		if op.option&optionBatchInsert != 0 {
 			if action != ExecNoResultAction {
 				err = errors.New("batch insert only support exec no result action")
 				handleErr()
@@ -164,7 +164,7 @@ func makeDBFuncContext(t reflect.Type, tdb *TgenSql, action Operation, templateS
 				return results
 			}
 		case ExecNoResultAction:
-			if op.option&OptionBatchInsert != 0 {
+			if op.option&optionBatchInsert != 0 {
 				stmtMap := map[string]*sql.Stmt{}
 				var preSql string
 				defer func() {
