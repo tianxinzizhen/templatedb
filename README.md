@@ -177,7 +177,7 @@ SELECT * FROM user u WHERE {where "u" .user};
 ## 完整示例
 
 ### 示例程序
-
+main.go
 ```go
 package main
 
@@ -235,19 +235,18 @@ func main() {
         panic(err)
     }
     fmt.Println("用户表创建成功")
+```
 
 ## 核心概念
 
 `tgsql` 使用结构体方法签名结合SQL模板的方式来执行SQL语句。您需要：
 
-1. 定义一个包含方法签名的结构体
-2. 创建对应的SQL模板文件
-3. 使用`InitDBFunc`初始化结构体方法
+1. 定义一个包含方法签名的结构体,且注释是//sql 或者/*sql 开头的
+2. 使用`InitDBFunc`初始化结构体方法
 
-### 示例：用户管理系统
+### 1. 定义接口结构体
 
-#### 1. 定义接口结构体
-
+user_db.go
 ```go
 // UserDB 用户数据访问接口, sql模板数据通过注释写入
 type UserDB struct {
@@ -294,7 +293,7 @@ if err := tdb.InitDBFunc(&userDB); err != nil {
     panic(err)
 }
 
-// 使用方法
+// 调用示例
 
 // 插入用户
 newUser := &User{
