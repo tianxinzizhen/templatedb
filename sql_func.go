@@ -196,7 +196,6 @@ func setParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 
 func whereParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 	sqw := &sqlwrite.SqlWrite{}
-	sqw.WriteString("where 1=1")
 	preAlias := ""
 	var num int
 	for _, param := range list {

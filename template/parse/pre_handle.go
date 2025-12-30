@@ -28,7 +28,9 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 	useMuiltiFieldOutput := true
 	useFunc := false
 	for l.nextItem().typ != itemEOF {
-		if l.item.typ == itemRightDelim {
+		if l.item.typ == itemError {
+			panic(fmt.Errorf("template: %s:%d: %s", l.name, l.line, l.item.val))
+		} else if l.item.typ == itemRightDelim {
 			bodySb.WriteString(l.item.val)
 			break
 		} else if l.item.typ > itemKeyword {
@@ -60,11 +62,19 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 					l.item.val = fmt.Sprintf(`"%s"`, l.item.val[1:len(l.item.val)-1])
 				}
 			case itemField:
-				condSb.WriteString(l.item.val)
 				condSb.WriteRune(' ')
+				condSb.WriteString(l.item.val)
 			}
 		} else if useFunc {
 			switch l.item.typ {
+			case itemIdentifier:
+				if !hasFunction(l.item.val) {
+					condSb.WriteString(" ." + l.item.val)
+					bodySb.WriteRune('.')
+				}
+			case itemField:
+				condSb.WriteRune(' ')
+				condSb.WriteString(l.item.val)
 			case itemChar:
 				if l.item.val == "," {
 					l.item.val = " "
