@@ -4,21 +4,27 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 )
 
-func handleFiledName(input, left, right string, hasFunction func(name string) bool) (cond, body string, pos int) {
+func newPreLex(input, left, right string) *sqlLexer {
+	return &sqlLexer{
+		input:     input,
+		leftDelim: left,
+	}
+}
+
+func newLex(input, left, right string) *lexer {
+	return &lexer{
+		input:      input,
+		leftDelim:  left,
+		rightDelim: right,
+	}
+}
+
+func handleFiledName(input, left, right string, hasFunction func(name string) bool) (cond, body string, pos Pos) {
 	condSb := strings.Builder{}
 	bodySb := strings.Builder{}
-	l := &lexer{
-		name:         "",
-		input:        input,
-		leftDelim:    left,
-		rightDelim:   right,
-		line:         1,
-		startLine:    1,
-		insideAction: false,
-	}
+	l := newLex(input, left, right)
 	useMuiltiFieldOutput := true
 	useFunc := false
 	for l.nextItem().typ != itemEOF {
@@ -70,175 +76,125 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 	if !useMuiltiFieldOutput {
 		condSb.Reset()
 	}
-	return condSb.String(), bodySb.String(), int(l.item.pos)
+	return condSb.String(), bodySb.String(), l.pos
 }
 
-func handleOption(input string, left, right string, hasFunction func(name string) bool) (cond, body string) {
+func handleOption(input string, left, right string, hasFunction func(name string) bool) (cond, body string, pos Pos) {
 	condSb := strings.Builder{}
 	bodySb := strings.Builder{}
-	pk := ""
-	psb := strings.Builder{}
-	for i := 0; i < len(input); {
-		if strings.HasPrefix(input[i:], left) {
-			x := strings.Index(input[i:], right)
-			if x != -1 {
-				cond, body, pos := handleFiledName(input[i:], left, right, hasFunction)
-				condSb.WriteString(cond)
-				bodySb.WriteString(body)
-				i += pos + len(right)
-			}
+	l := newPreLex(input, left, right)
+	leftParen := 0
+	preKey := ""
+	for l.nextItem().typ != itemEOF {
+		if l.item.typ == itemLeftDelim {
+			cond, body, pos := handleFiledName(l.input[l.item.pos:], left, right, hasFunction)
+			condSb.WriteString(cond)
+			bodySb.WriteString(body)
+			l.pos += pos
+			l.start += pos
+			continue
 		}
-		v, size := utf8.DecodeRuneInString(input[i:])
-		i += size
-		switch {
-		case v == '@':
-			// skip @@
-			v, size = utf8.DecodeRuneInString(input[i:])
-			if v == '@' {
-				bodySb.WriteString("@@")
-				i += size
-				continue
-			}
-			dot := true
-			bodySb.WriteString(left)
-			for i < len(input) {
-				if isAlphaNumeric(v) {
-					if dot {
-						dot = false
-						condSb.WriteByte('.')
-						bodySb.WriteByte('.')
-					}
-					condSb.WriteRune(v)
-					bodySb.WriteRune(v)
-					i += size
-				} else {
-					break
+		switch l.item.typ {
+		case itemChar:
+			switch l.item.val {
+			case "[":
+				leftParen++
+			case "]":
+				leftParen--
+				if leftParen == 0 {
+					return condSb.String(), bodySb.String(), l.pos
 				}
-				v, size = utf8.DecodeRuneInString(input[i:])
+			case "?":
+				condSb.WriteString(" ." + preKey)
+				bodySb.WriteString(left)
+				bodySb.WriteByte('.')
+				bodySb.WriteString(preKey)
+				bodySb.WriteString(right)
+			default:
+				bodySb.WriteString(l.item.val)
 			}
-			condSb.WriteRune(' ')
-			bodySb.WriteString(right)
-		case v == '?':
+		case itemField:
+			condSb.WriteString(l.item.val)
 			bodySb.WriteString(left)
-			v, size = utf8.DecodeRuneInString(input[i:])
-			if v == ':' {
-				i += size
-				bodySb.WriteString("json ")
-			}
-			bodySb.WriteString("." + pk)
-			condSb.WriteString("." + pk)
-			condSb.WriteRune(' ')
+			bodySb.WriteString(l.item.val)
 			bodySb.WriteString(right)
-		case isAlphaNumeric(v):
-			bodySb.WriteRune(v)
-			psb.WriteRune(v)
+		case itemIdentifier:
+			preKey = l.item.val
+			bodySb.WriteString(l.item.val)
 		default:
-			if isSpace(v) {
-				bodySb.WriteRune(' ')
-				v, size = utf8.DecodeRuneInString(input[i:])
-				for isSpace(v) {
-					i += size
-					v, size = utf8.DecodeRuneInString(input[i:])
-				}
-			} else {
-				if psb.String() != "" {
-					pk = psb.String()
-				}
-				psb.Reset()
-				bodySb.WriteRune(v)
-			}
+			bodySb.WriteString(l.item.val)
 		}
 	}
-	return condSb.String(), bodySb.String()
+	return condSb.String(), bodySb.String(), l.pos
 }
 
 // 处理input中@信息，将其替换为left+filedName+right
-func handleAtsign(input, left, right string, hasFunction func(name string) bool) string {
-	isb := strings.Builder{}
-	pk := ""
-	psb := strings.Builder{}
-	for i := 0; i < len(input); {
-		if strings.HasPrefix(input[i:], left) {
-			_, body, pos := handleFiledName(input[i:], left, right, hasFunction)
-			isb.WriteString(body)
-			i += pos + len(right)
+func handleAtsign(input, left, right string, hasFunction func(name string) bool) (body string) {
+	bodySb := strings.Builder{}
+	l := newPreLex(input, left, right)
+	preKey := ""
+	for l.nextItem().typ != itemEOF {
+		if l.item.typ == itemLeftDelim {
+			_, body, pos := handleFiledName(l.input[l.pos:], left, right, hasFunction)
+			bodySb.WriteString(body)
+			l.pos += pos
+			l.start += pos
+			continue
 		}
-		v, size := utf8.DecodeRuneInString(input[i:])
-		i += size
-		switch {
-		case v == '@':
-			// skip @@
-			v, size = utf8.DecodeRuneInString(input[i:])
-			if v == '@' {
-				isb.WriteString("@@")
-				i += size
-				continue
-			}
-			dot := true
-			isb.WriteString(left)
-			for i < len(input) {
-				if isAlphaNumeric(v) {
-					if dot {
-						dot = false
-						isb.WriteByte('.')
-					}
-					isb.WriteRune(v)
-					i += size
-				} else {
-					break
+		switch l.item.typ {
+		case itemIdentifier:
+			switch strings.ToLower(l.item.val) {
+			case "insert":
+				bodySb.WriteString(l.item.val)
+				columns, body, pos := handleInsertColumns(l.input[l.pos:], left, right, hasFunction)
+				l.pos += pos
+				l.start += pos
+				bodySb.WriteString(body)
+				if len(columns) > 0 {
+					body, pos := handleInsertValues(l.input[l.pos:], left, right, hasFunction, columns)
+					l.pos += pos
+					l.start += pos
+					bodySb.WriteString(body)
 				}
-				v, size = utf8.DecodeRuneInString(input[i:])
+			default:
+				preKey = l.item.val
+				bodySb.WriteString(l.item.val)
 			}
-			isb.WriteString(right)
-		case v == '[':
-			x := strings.IndexByte(input[i:], ']')
-			if x == -1 {
-				isb.WriteRune(v)
-			} else {
-				cond, body := handleOption(input[i:i+x], left, right, hasFunction)
+		case itemField:
+			bodySb.WriteString(left)
+			bodySb.WriteString(l.item.val)
+			bodySb.WriteString(right)
+		case itemChar:
+			switch l.item.val {
+			case "?":
+				bodySb.WriteString(left)
+				bodySb.WriteString(" ." + preKey)
+				bodySb.WriteString(right)
+			case "[":
+				cond, body, pos := handleOption(l.input[l.pos:], left, right, hasFunction)
+				l.pos += pos
+				l.start += pos
 				hasCond := strings.TrimSpace(cond) != ""
 				if hasCond {
-					isb.WriteString(left)
-					isb.WriteString("if and ")
-					isb.WriteString(cond)
-					isb.WriteString(right)
+					bodySb.WriteString(left)
+					bodySb.WriteString("if and ")
+					bodySb.WriteString(cond)
+					bodySb.WriteString(right)
 				}
-				isb.WriteString(body)
+				bodySb.WriteString(body)
 				if hasCond {
-					isb.WriteString(left)
-					isb.WriteString("end")
-					isb.WriteString(right)
+					bodySb.WriteString(left)
+					bodySb.WriteString("end")
+					bodySb.WriteString(right)
 				}
-				i += x + 1 // skip ']'
+			default:
+				bodySb.WriteString(l.item.val)
 			}
-		case v == '?':
-			isb.WriteString(left)
-			v, size = utf8.DecodeRuneInString(input[i:])
-			if v == ':' {
-				i += size
-				isb.WriteString("json ")
-			}
-			isb.WriteString("." + pk)
-			isb.WriteString(right)
-		case isAlphaNumeric(v):
-			isb.WriteRune(v)
-			psb.WriteRune(v)
+		case itemSpace:
+			bodySb.WriteString(" ")
 		default:
-			if isSpace(v) {
-				isb.WriteRune(' ')
-				v, size = utf8.DecodeRuneInString(input[i:])
-				for isSpace(v) {
-					i += size
-					v, size = utf8.DecodeRuneInString(input[i:])
-				}
-			} else {
-				if psb.String() != "" {
-					pk = psb.String()
-				}
-				psb.Reset()
-				isb.WriteRune(v)
-			}
+			bodySb.WriteString(l.item.val)
 		}
 	}
-	return isb.String()
+	return bodySb.String()
 }

@@ -25,6 +25,7 @@ func init() {
 	RegisterTemplateFunc("json", marshal)
 	RegisterTemplateFunc("in", inParameter)
 	RegisterTemplateFunc("set", setParameter)
+	RegisterTemplateFunc("where", whereParameter)
 }
 
 func RegisterTemplateFunc(key string, funcMethod any) error {
@@ -180,6 +181,52 @@ func setParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 					name := param.Type().Field(i).Name
 					if num > 0 {
 						sqw.WriteString(",")
+					}
+					num++
+					sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), val)
+				}
+			}
+			preAlias = ""
+		default:
+			return nil, fmt.Errorf("setParameter sql function in paramter is not string, map or struct")
+		}
+	}
+	return sqw, nil
+}
+
+func whereParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
+	sqw := &sqlwrite.SqlWrite{}
+	sqw.WriteString("where 1=1")
+	preAlias := ""
+	var num int
+	for _, param := range list {
+		switch param.Kind() {
+		case reflect.String:
+			if preAlias == "" {
+				preAlias = param.Interface().(string) + "."
+			}
+		case reflect.Map:
+			if param.Type().Key().Kind() != reflect.String {
+				preAlias = ""
+				continue
+			}
+			iter := param.MapRange()
+			for iter.Next() {
+				name := iter.Key().Interface().(string)
+				if num > 0 {
+					sqw.WriteString(" and ")
+				}
+				num++
+				sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), iter.Value().Interface())
+			}
+			preAlias = ""
+		case reflect.Struct:
+			for i := 0; i < param.NumField(); i++ {
+				val := param.Field(i).Interface()
+				if truth, ok := template.IsTrue(val); ok && truth {
+					name := param.Type().Field(i).Name
+					if num > 0 {
+						sqw.WriteString(" and ")
 					}
 					num++
 					sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), val)
