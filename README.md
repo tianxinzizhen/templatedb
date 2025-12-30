@@ -356,7 +356,7 @@ if err := tdb.LoadFuncDataInfoBytes(userSqlBytes); err != nil {
 }
 
 // 3. 从embed.FS加载 (推荐用于生产环境)
-//go:embed sql/*.sql
+//go:embed *
 var sqlFiles embed.FS
 if err := tdb.LoadFuncDataInfo(sqlFiles); err != nil {
     panic(err)
