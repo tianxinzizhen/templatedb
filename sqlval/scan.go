@@ -8,21 +8,24 @@ import (
 
 type ScanVal[T any] interface {
 	sql.Scanner
-	Val() T
-	ValPtr() *T
+	ScanValue() (T, error)
+	ScanValuePtr() (*T, error)
 }
 
 var localScanVal = make(map[reflect.Type]reflect.Type)
 
 func RegisterScanVal[T any](sv ScanVal[T]) error {
 	if reflect.TypeFor[T]().Kind() == reflect.Pointer {
-		return fmt.Errorf("sv.Val() must be not pointer")
+		return fmt.Errorf("sv.ScanValue() must be not pointer")
 	}
 	if _, ok := localScanVal[reflect.TypeFor[T]()]; ok {
-		return fmt.Errorf("sv.Val() type already registered")
+		return fmt.Errorf("sv.ScanValue() type already registered")
+	}
+	if _, ok := localScanVal[reflect.TypeFor[T]()]; ok {
+		return fmt.Errorf("sv.ScanValue() type already registered")
 	}
 	if _, ok := localScanVal[reflect.TypeFor[*T]()]; ok {
-		return fmt.Errorf("sv.ValPtr() type already registered")
+		return fmt.Errorf("sv.ScanValuePtr() type already registered")
 	}
 	localScanVal[reflect.TypeFor[T]()] = reflect.TypeOf(sv).Elem()
 	localScanVal[reflect.TypeFor[*T]()] = reflect.TypeOf(sv).Elem()
@@ -46,7 +49,7 @@ func getScanValType(t reflect.Type) reflect.Type {
 }
 
 func getScanVal(v reflect.Value) reflect.Value {
-	method := v.MethodByName("Val")
+	method := v.MethodByName("ScanValue")
 	if method.IsValid() {
 		return method.Call([]reflect.Value{})[0]
 	}
@@ -54,7 +57,7 @@ func getScanVal(v reflect.Value) reflect.Value {
 }
 
 func getScanValPtr(v reflect.Value) reflect.Value {
-	method := v.MethodByName("ValPtr")
+	method := v.MethodByName("ScanValuePtr")
 	if method.IsValid() {
 		return method.Call([]reflect.Value{})[0]
 	}

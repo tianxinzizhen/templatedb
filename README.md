@@ -393,6 +393,109 @@ tdb.SqlLogFunc(func(ctx context.Context, funcName, sql string, args ...any) {
 tdb.Delims("{{", "}}")
 ```
 
+### 使用sql字符串替换模板变量
+
+```go
+// 使用sql字符串替换模板变量
+    /*sql
+    SELECT id, user_name, age, email, create_time FROM user_{lang} 
+    WHERE 1=1 [AND age > {.age}] [AND user_name {like .keyword}] 
+    ORDER BY id;
+    */
+    List     func(ctx context.Context, lang sqlwrite.Sql, age int, keyword string) ([]*User, error)
+    /*sql
+    INSERT INTO user_{lang} (user_name) VALUES ({.UserName})
+    */
+    Insert   func(ctx context.Context, lang sqlwrite.Sql, user *User) (sql.Result, error)
+```
+调用示例
+
+```go
+// 列表查询
+users, err := userDB.List(context.Background(), sqlwrite.Sql("en"), 20, "张")
+if err != nil {
+    panic(err)
+}
+fmt.Printf("条件查询结果: %+v\n", users)
+
+// 插入用户
+newUser := &User{
+    UserName: "张三",
+}
+result, err := userDB.Insert(context.Background(), sqlwrite.Sql("en"), newUser)
+if err != nil {
+    panic(err)
+}
+lastID, _ := result.LastInsertId()
+fmt.Printf("插入用户成功，ID: %d\n", lastID)
+```
+
+### 注册参数转换器
+
+```go
+// 必须实现该接口
+// type Convert[T any] interface {
+// 	ConvertValue(v T) (any, error)
+// 	ConvertValuePtr(v *T) (any, error)
+// }
+
+// 如果参数是一个特殊的时间类型，例如time.Time
+type Time2 struct {
+    time.Time
+}
+
+type Time2Converter struct{}
+// 实现Convert接口
+func (t *Time2Converter) ConvertValue(v Time2) (any, error) {
+    return v.Time, nil
+}
+func (t *Time2Converter) ConvertValuePtr(v *Time2) (any, error) {
+    return v.Time, nil
+}
+
+// 注册参数转换器
+tdb.RegisterParamConverter(&Time2Converter{})
+```
+
+### 注册结果扫描器
+
+```go
+// 必须实现该接口
+// type Scan[T any] interface {
+// 	ScanValue(v any) (T, error)
+// 	ScanValuePtr(v any) (*T, error)
+// }
+
+// 如果结果是一个特殊的时间类型，例如time.Time
+type Time2 struct {
+    time.Time
+}
+
+type Time2Scanner struct{
+    t time.Time
+}
+
+// 实现Scan接口
+func (ts *Time2Scanner) Scan(dest any) error {
+	if t, ok := dest.(time.Time); ok {
+		ts.t = t
+	}
+	return nil
+}
+
+func (t *Time2Scanner) ScanValue() (Time2, error) {
+    return Time2{Time: t.t}, nil
+}
+
+func (t *Time2Scanner) ScanValuePtr() (*Time2, error) {
+    return &Time2{Time: t.t}, nil
+}
+
+// 注册结果扫描器
+tdb.RegisterResultScanner(&Time2Scanner{})
+```
+
+
 ## 测试
 
 项目包含完整的测试用例，您可以通过以下命令运行：
