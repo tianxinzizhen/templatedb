@@ -20,7 +20,7 @@ insert into test values(1,"a");
 type TestDB struct {
 	// 需要返回新插入的自增id
 	/*sql
-	{if}insert into test values ({ id , name})
+	insert into test values ({ id , name})
 	*/
 	Insert func(ctx context.Context, testInfo *Test) (sql.Result, error)
 
