@@ -7,9 +7,9 @@ import (
 )
 
 var (
-	contextType   = reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType     = reflect.TypeOf((*error)(nil)).Elem()
-	sqlResultType = reflect.TypeOf((*sql.Result)(nil)).Elem()
+	contextType   = reflect.TypeFor[context.Context]()
+	errorType     = reflect.TypeFor[error]()
+	sqlResultType = reflect.TypeFor[sql.Result]()
 )
 
 type Operation int
