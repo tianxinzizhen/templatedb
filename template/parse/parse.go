@@ -245,7 +245,17 @@ func (t *Tree) stopParse() {
 func (t *Tree) Parse(text, leftDelim, rightDelim string, treeSet map[string]*Tree, funcs ...map[string]any) (tree *Tree, err error) {
 	defer t.recover(&err)
 	t.ParseName = t.Name
-	lexer := lex(t.Name, text, leftDelim, rightDelim, t.hasFunction)
+	lexer := lex(t.Name, text, leftDelim, rightDelim, func(name string) bool {
+		for _, funcMap := range funcs {
+			if funcMap == nil {
+				continue
+			}
+			if funcMap[name] != nil {
+				return true
+			}
+		}
+		return false
+	})
 	t.startParse(funcs, lexer, treeSet)
 	t.text = text
 	t.parse()
