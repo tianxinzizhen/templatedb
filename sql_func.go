@@ -40,8 +40,8 @@ func RegisterTemplateFunc(key string, funcMethod any) error {
 	return nil
 }
 
-func sqlStr(str string) (sqlwrite.Sql, error) {
-	return sqlwrite.Sql(str), nil
+func sqlStr(strs ...string) (sqlwrite.Sql, error) {
+	return sqlwrite.Sql(strings.Join(strs, "")), nil
 }
 
 func comma(iVal reflect.Value) (*sqlwrite.SqlWrite, error) {
