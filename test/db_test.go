@@ -27,6 +27,9 @@ func GetDBFuncTemplateDB() (*tgsql.TgenSql, error) {
 	if err != nil {
 		return nil, err
 	}
+	tdb.SqlLogFunc(func(ctx context.Context, funcName, sql string, args ...any) {
+		fmt.Println(ctx, funcName, sql, args)
+	})
 	return tdb, nil
 }
 
