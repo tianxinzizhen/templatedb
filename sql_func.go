@@ -26,6 +26,9 @@ func init() {
 	RegisterTemplateFunc("in", inParameter)
 	RegisterTemplateFunc("set", setParameter)
 	RegisterTemplateFunc("where", whereParameter)
+
+	// other sql template function
+	RegisterTemplateFunc("sql", sqlStr)
 }
 
 func RegisterTemplateFunc(key string, funcMethod any) error {
@@ -35,6 +38,10 @@ func RegisterTemplateFunc(key string, funcMethod any) error {
 		sqlFunc[key] = funcMethod
 	}
 	return nil
+}
+
+func sqlStr(str string) (sqlwrite.Sql, error) {
+	return sqlwrite.Sql(str), nil
 }
 
 func comma(iVal reflect.Value) (*sqlwrite.SqlWrite, error) {
