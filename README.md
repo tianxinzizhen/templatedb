@@ -81,6 +81,9 @@ INSERT INTO user (id, user_name, age)
 VALUES ({id}, {user_name}, {age});
 
 INSERT INTO user (id, user_name, age)
+VALUES ({id, user_name, age});
+
+INSERT INTO user (id, user_name, age)
 VALUES ({@id, @user_name, @age});
 
 INSERT INTO user (id, user_name, age)
@@ -95,8 +98,15 @@ VALUES ({.id}, {.user_name}, {.age});
 使用方括号`[]`包裹可选的SQL条件：
 
 ```sql
-SELECT * FROM user WHERE 1 = 1 [AND id = {Id}] [AND user_name = {UserName}];
-
+SELECT * FROM user WHERE 1 = 1 [AND id = ? ] [AND user_name = ?];
+-- 或者
+SELECT * FROM user WHERE 1 = 1 [AND id = @id ] [AND user_name = @user_name];
+-- 或者
+SELECT * FROM user WHERE 1 = 1 [AND id = {id} ] [AND user_name = {user_name}];
+-- 或者
+SELECT * FROM user WHERE 1 = 1 [AND id = {Id} ] [AND user_name = {UserName}];
+-- 或者
+SELECT * FROM user WHERE 1 = 1 [AND id = {.id} ] [AND user_name = {.UserName}];
 -- 等价于
 SELECT * FROM user WHERE 1 = 1 {if .Id} AND id = {Id} {end} {if .UserName} AND user_name = {UserName} {end};
 ```
@@ -107,6 +117,7 @@ SELECT * FROM user WHERE 1 = 1 {if .Id} AND id = {Id} {end} {if .UserName} AND u
 
 ```sql
 -- 不同匹配模式
+SELECT * FROM user WHERE user_name like ?  -- 自动转换成 user_name {like .user_name}
 SELECT * FROM user WHERE user_name {like .user_name};  -- %value%
 SELECT * FROM user WHERE user_name {liker .user_name}; -- %value
 SELECT * FROM user WHERE user_name {likel .user_name}; -- value%
@@ -139,9 +150,10 @@ VALUES ({.id}, {marshal .info});
 #### 4. In 函数
 
 ```sql
+-- 等价于
+SELECT * FROM user WHERE id in ?  -- 自动转换成 id {in .id}
 -- 处理单个值
 SELECT * FROM user WHERE id {in .id};
-
 -- 处理数组
 SELECT * FROM user WHERE id {in .ids};
 ```

@@ -95,6 +95,7 @@ func handleOption(input string, left, right string, hasFunction func(name string
 	l := newPreLex(input, left, right)
 	leftParen := 0
 	preKey := ""
+	preOpt := ""
 	for l.nextItem().typ != itemEOF {
 		if l.item.typ == itemLeftDelim {
 			cond, body, pos := handleFiledName(l.input[l.item.pos:], left, right, hasFunction)
@@ -116,10 +117,21 @@ func handleOption(input string, left, right string, hasFunction func(name string
 				}
 			case "?":
 				condSb.WriteString(" ." + preKey)
-				bodySb.WriteString(left)
-				bodySb.WriteByte('.')
-				bodySb.WriteString(preKey)
-				bodySb.WriteString(right)
+				switch preOpt {
+				case "like":
+					bodySb.WriteString(left)
+					bodySb.WriteString("like ." + preKey)
+					bodySb.WriteString(right)
+				case "in":
+					bodySb.WriteString(left)
+					bodySb.WriteString("in ." + preKey)
+					bodySb.WriteString(right)
+				default:
+					bodySb.WriteString(left)
+					bodySb.WriteString(" ." + preKey)
+					bodySb.WriteString(right)
+				}
+				preOpt = ""
 			default:
 				bodySb.WriteString(l.item.val)
 			}
@@ -129,8 +141,13 @@ func handleOption(input string, left, right string, hasFunction func(name string
 			bodySb.WriteString(l.item.val)
 			bodySb.WriteString(right)
 		case itemIdentifier:
-			preKey = l.item.val
-			bodySb.WriteString(l.item.val)
+			switch strings.ToLower(l.item.val) {
+			case "like", "in":
+				preOpt = l.item.val
+			default:
+				preKey = l.item.val
+				bodySb.WriteString(l.item.val)
+			}
 		default:
 			bodySb.WriteString(l.item.val)
 		}
@@ -143,6 +160,7 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 	bodySb := strings.Builder{}
 	l := newPreLex(input, left, right)
 	preKey := ""
+	preOpt := ""
 	for l.nextItem().typ != itemEOF {
 		if l.item.typ == itemLeftDelim {
 			_, body, pos := handleFiledName(l.input[l.pos:], left, right, hasFunction)
@@ -166,6 +184,8 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 					l.start += pos
 					bodySb.WriteString(body)
 				}
+			case "like", "in":
+				preOpt = l.item.val
 			default:
 				preKey = l.item.val
 				bodySb.WriteString(l.item.val)
@@ -177,9 +197,21 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 		case itemChar:
 			switch l.item.val {
 			case "?":
-				bodySb.WriteString(left)
-				bodySb.WriteString(" ." + preKey)
-				bodySb.WriteString(right)
+				switch preOpt {
+				case "like":
+					bodySb.WriteString(left)
+					bodySb.WriteString("like ." + preKey)
+					bodySb.WriteString(right)
+				case "in":
+					bodySb.WriteString(left)
+					bodySb.WriteString("in ." + preKey)
+					bodySb.WriteString(right)
+				default:
+					bodySb.WriteString(left)
+					bodySb.WriteString(" ." + preKey)
+					bodySb.WriteString(right)
+				}
+				preOpt = ""
 			case "[":
 				cond, body, pos := handleOption(l.input[l.pos:], left, right, hasFunction)
 				l.pos += pos
