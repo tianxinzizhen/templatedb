@@ -6,50 +6,25 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/tianxinzizhen/tgsql/sqlwrite"
 	"github.com/tianxinzizhen/tgsql/template"
 
 	"github.com/tianxinzizhen/tgsql/util"
 )
 
-var sqlFunc template.FuncMap = make(template.FuncMap)
-
-func init() {
-	//sql 函数的加载
-	RegisterTemplateFunc("comma", comma)
-	RegisterTemplateFunc("like", like)
-	RegisterTemplateFunc("liker", likeRight)
-	RegisterTemplateFunc("likel", likeLeft)
-	RegisterTemplateFunc("param", params)
-	RegisterTemplateFunc("marshal", marshal)
-	RegisterTemplateFunc("json", marshal)
-	RegisterTemplateFunc("in", inParameter)
-	RegisterTemplateFunc("set", setParameter)
-	RegisterTemplateFunc("where", whereParameter)
-
-	// other sql template function
-	RegisterTemplateFunc("sql", sqlStr)
+type SqlFunc struct {
+	Args []any
 }
 
-func RegisterTemplateFunc(key string, funcMethod any) error {
-	if _, ok := sqlFunc[key]; ok {
-		return fmt.Errorf("add template func[%s] already exists ", key)
-	} else {
-		sqlFunc[key] = funcMethod
-	}
-	return nil
+func (*SqlFunc) sqlStr(strs ...string) (string, error) {
+	return strings.Join(strs, ""), nil
 }
 
-func sqlStr(strs ...string) (sqlwrite.Sql, error) {
-	return sqlwrite.Sql(strings.Join(strs, "")), nil
-}
-
-func comma(iVal reflect.Value) (*sqlwrite.SqlWrite, error) {
+func (sq *SqlFunc) comma(iVal reflect.Value) (string, error) {
 	i, isNil := util.Indirect(iVal)
 	if isNil {
-		return nil, fmt.Errorf("comma sql function in paramter is nil")
+		return "", fmt.Errorf("comma sql function in paramter is nil")
 	}
-	sqw := &sqlwrite.SqlWrite{}
+	sb := &strings.Builder{}
 	var commaPrint bool
 	switch i.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -57,29 +32,29 @@ func comma(iVal reflect.Value) (*sqlwrite.SqlWrite, error) {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		commaPrint = i.Uint() > 0
 	default:
-		return nil, nil
+		return "", nil
 	}
 	if commaPrint {
-		sqw.WriteString(",")
+		sb.WriteString(",")
 	} else {
-		sqw.WriteString("")
+		sb.WriteString("")
 	}
-	return sqw, nil
+	return sb.String(), nil
 }
 
-func params(list ...reflect.Value) *sqlwrite.SqlWrite {
-	sqw := &sqlwrite.SqlWrite{}
+func (sq *SqlFunc) params(list ...reflect.Value) string {
+	sb := &strings.Builder{}
 	for i, v := range list {
 		if i > 0 {
-			sqw.WriteString(",")
+			sb.WriteString(",")
 		}
-		sqw.WriteParam("? ", v.Interface())
+		sq.Args = append(sq.Args, v.Interface())
+		sb.WriteString("?")
 	}
-	return sqw
+	return sb.String()
 }
 
-func like(param reflect.Value) *sqlwrite.SqlWrite {
-	sqw := &sqlwrite.SqlWrite{}
+func (sq *SqlFunc) like(param reflect.Value) string {
 	p := fmt.Sprint(param)
 	lb := strings.Builder{}
 	if !strings.HasPrefix(p, "%") {
@@ -89,75 +64,76 @@ func like(param reflect.Value) *sqlwrite.SqlWrite {
 	if !strings.HasSuffix(p, "%") {
 		lb.WriteByte('%')
 	}
-	sqw.WriteParam("like ?", lb.String())
-	return sqw
+	sq.Args = append(sq.Args, p)
+	return "like ?"
 }
 
-func likeRight(param reflect.Value) *sqlwrite.SqlWrite {
-	sqw := &sqlwrite.SqlWrite{}
+func (sq *SqlFunc) likeRight(param reflect.Value) string {
 	p := fmt.Sprint(param)
 	lb := strings.Builder{}
 	lb.WriteString(p)
 	if !strings.HasSuffix(p, "%") {
 		lb.WriteByte('%')
 	}
-	sqw.WriteParam("like ?", lb.String())
-	return sqw
+	sq.Args = append(sq.Args, p)
+	return "like ?"
 }
 
-func likeLeft(param reflect.Value) *sqlwrite.SqlWrite {
-	sqw := &sqlwrite.SqlWrite{}
+func (sq *SqlFunc) likeLeft(param reflect.Value) string {
 	p := fmt.Sprint(param)
 	lb := strings.Builder{}
 	if !strings.HasPrefix(p, "%") {
 		lb.WriteByte('%')
 	}
 	lb.WriteString(p)
-	sqw.WriteParam("like ?", lb.String())
-	return sqw
+	sq.Args = append(sq.Args, p)
+	return "like ?"
 }
 
-func marshal(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
-	sqw := &sqlwrite.SqlWrite{}
+func (sq *SqlFunc) marshal(list ...reflect.Value) (string, error) {
+	sb := &strings.Builder{}
 	for i, v := range list {
 		if i > 0 {
-			sqw.WriteString(",")
+			sb.WriteString(",")
 		}
 		vi := v.Interface()
 		mJson, err := json.Marshal(vi)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
-		sqw.WriteParam("? ", string(mJson))
+		sb.WriteString("?")
+		sq.Args = append(sq.Args, string(mJson))
 	}
-	return sqw, nil
+	return sb.String(), nil
 }
 
-func inParameter(list ...reflect.Value) *sqlwrite.SqlWrite {
-	sqw := &sqlwrite.SqlWrite{}
+func (sq *SqlFunc) inParameter(list ...reflect.Value) string {
+	sb := &strings.Builder{}
 	var num int
 	for _, v := range list {
 		if v.Kind() == reflect.Slice {
 			for i := 0; i < v.Len(); i++ {
 				if num > 0 {
-					sqw.WriteString(",")
+					sb.WriteString(",")
 				}
 				num++
-				sqw.WriteParam("? ", v.Index(i).Interface())
+				sb.WriteString("?")
+				sq.Args = append(sq.Args, v.Index(i).Interface())
 			}
 		} else {
 			if num > 0 {
-				sqw.WriteString(",")
+				sb.WriteString(",")
 			}
 			num++
-			sqw.WriteParam("? ", v.Interface())
+			sb.WriteString("?")
+			sq.Args = append(sq.Args, v.Interface())
 		}
 	}
-	return sqw
+	return sb.String()
 }
 
-func setParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
-	sqw := &sqlwrite.SqlWrite{}
+func (sq *SqlFunc) setParameter(list ...reflect.Value) (string, error) {
+	sb := &strings.Builder{}
 	preAlias := ""
 	var num int
 	for _, param := range list {
@@ -175,10 +151,13 @@ func setParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 			for iter.Next() {
 				name := iter.Key().Interface().(string)
 				if num > 0 {
-					sqw.WriteString(",")
+					sb.WriteString(",")
 				}
 				num++
-				sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), iter.Value().Interface())
+				sb.WriteString(preAlias)
+				sb.WriteString(name)
+				sb.WriteString(" = ?")
+				sq.Args = append(sq.Args, iter.Value().Interface())
 			}
 			preAlias = ""
 		case reflect.Struct:
@@ -187,22 +166,25 @@ func setParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 				if truth, ok := template.IsTrue(val); ok && truth {
 					name := param.Type().Field(i).Name
 					if num > 0 {
-						sqw.WriteString(",")
+						sb.WriteString(",")
 					}
 					num++
-					sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), val)
+					sb.WriteString(preAlias)
+					sb.WriteString(name)
+					sb.WriteString(" = ?")
+					sq.Args = append(sq.Args, val)
 				}
 			}
 			preAlias = ""
 		default:
-			return nil, fmt.Errorf("setParameter sql function in paramter is not string, map or struct")
+			return "", fmt.Errorf("setParameter sql function in paramter is not string, map or struct")
 		}
 	}
-	return sqw, nil
+	return sb.String(), nil
 }
 
-func whereParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
-	sqw := &sqlwrite.SqlWrite{}
+func (sq *SqlFunc) whereParameter(list ...reflect.Value) (string, error) {
+	sb := &strings.Builder{}
 	preAlias := ""
 	var num int
 	for _, param := range list {
@@ -220,10 +202,13 @@ func whereParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 			for iter.Next() {
 				name := iter.Key().Interface().(string)
 				if num > 0 {
-					sqw.WriteString(" and ")
+					sb.WriteString(" and ")
 				}
 				num++
-				sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), iter.Value().Interface())
+				sb.WriteString(preAlias)
+				sb.WriteString(name)
+				sb.WriteString(" = ?")
+				sq.Args = append(sq.Args, iter.Value().Interface())
 			}
 			preAlias = ""
 		case reflect.Struct:
@@ -232,16 +217,19 @@ func whereParameter(list ...reflect.Value) (*sqlwrite.SqlWrite, error) {
 				if truth, ok := template.IsTrue(val); ok && truth {
 					name := param.Type().Field(i).Name
 					if num > 0 {
-						sqw.WriteString(" and ")
+						sb.WriteString(" and ")
 					}
 					num++
-					sqw.WriteParam(fmt.Sprintf("%s = ?", preAlias+name), val)
+					sb.WriteString(preAlias)
+					sb.WriteString(name)
+					sb.WriteString(" = ?")
+					sq.Args = append(sq.Args, val)
 				}
 			}
 			preAlias = ""
 		default:
-			return nil, fmt.Errorf("setParameter sql function in paramter is not string, map or struct")
+			return "", fmt.Errorf("setParameter sql function in paramter is not string, map or struct")
 		}
 	}
-	return sqw, nil
+	return sb.String(), nil
 }

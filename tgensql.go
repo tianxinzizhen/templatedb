@@ -69,9 +69,9 @@ func NewTgenSql(sqlDB *sql.DB) *TgenSql {
 		filedName:         template.DefaultFieldName,
 		localFuncDataInfo: load.NewLoadFuncDataInfo(),
 	}
-	for k, v := range sqlFunc {
-		tdb.sqlFunc[k] = v
-	}
+	// for k, v := range sqlFunc {
+	// 	tdb.sqlFunc[k] = v
+	// }
 	return tdb
 }
 
@@ -207,6 +207,7 @@ func (tdb *TgenSql) sqlTemplateBuild(ctx context.Context, tsql string, parms any
 		tdb.template[pc][line] = templateSql
 	}
 	templateSql := tdb.template[pc][line]
+	// templateSql.Funcs()
 	sqw := &sqlwrite.SqlWrite{}
 	err := templateSql.Execute(sqw, parms)
 	if err != nil {
