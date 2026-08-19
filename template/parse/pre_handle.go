@@ -6,10 +6,13 @@ import (
 	"strings"
 )
 
+const dot = " ."
+
 func newPreLex(input, left, right string) *sqlLexer {
 	return &sqlLexer{
-		input:     input,
-		leftDelim: left,
+		input:      input,
+		leftDelim:  left,
+		rightDelim: right,
 	}
 }
 
@@ -40,7 +43,8 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 			switch l.item.typ {
 			case itemIdentifier:
 				if !hasFunction(l.item.val) {
-					condSb.WriteString(" ." + l.item.val)
+					condSb.WriteString(dot)
+					condSb.WriteString(l.item.val)
 					bodySb.WriteRune('.')
 				} else {
 					useMuiltiFieldOutput = false
@@ -69,7 +73,8 @@ func handleFiledName(input, left, right string, hasFunction func(name string) bo
 			switch l.item.typ {
 			case itemIdentifier:
 				if !hasFunction(l.item.val) {
-					condSb.WriteString(" ." + l.item.val)
+					condSb.WriteString(dot)
+					condSb.WriteString(l.item.val)
 					bodySb.WriteRune('.')
 				}
 			case itemField:
@@ -116,19 +121,23 @@ func handleOption(input string, left, right string, hasFunction func(name string
 					return condSb.String(), bodySb.String(), l.pos
 				}
 			case "?":
-				condSb.WriteString(" ." + preKey)
+				condSb.WriteString(dot)
+				condSb.WriteString(preKey)
 				switch preOpt {
 				case "like":
 					bodySb.WriteString(left)
-					bodySb.WriteString("like ." + preKey)
+					bodySb.WriteString("like .")
+					bodySb.WriteString(preKey)
 					bodySb.WriteString(right)
 				case "in":
 					bodySb.WriteString(left)
-					bodySb.WriteString("in ." + preKey)
+					bodySb.WriteString("in .")
+					bodySb.WriteString(preKey)
 					bodySb.WriteString(right)
 				default:
 					bodySb.WriteString(left)
-					bodySb.WriteString(" ." + preKey)
+					bodySb.WriteString(dot)
+					bodySb.WriteString(preKey)
 					bodySb.WriteString(right)
 				}
 				preOpt = ""
@@ -200,15 +209,18 @@ func handleAtsign(input, left, right string, hasFunction func(name string) bool)
 				switch preOpt {
 				case "like":
 					bodySb.WriteString(left)
-					bodySb.WriteString("like ." + preKey)
+					bodySb.WriteString("like .")
+					bodySb.WriteString(preKey)
 					bodySb.WriteString(right)
 				case "in":
 					bodySb.WriteString(left)
-					bodySb.WriteString("in ." + preKey)
+					bodySb.WriteString("in .")
+					bodySb.WriteString(preKey)
 					bodySb.WriteString(right)
 				default:
 					bodySb.WriteString(left)
-					bodySb.WriteString(" ." + preKey)
+					bodySb.WriteString(dot)
+					bodySb.WriteString(preKey)
 					bodySb.WriteString(right)
 				}
 				preOpt = ""

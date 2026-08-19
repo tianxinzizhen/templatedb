@@ -7,12 +7,13 @@ import (
 )
 
 type sqlLexer struct {
-	input     string // the string being scanned
-	pos       Pos    // current position in the input
-	start     Pos    // start position of this item
-	atEOF     bool   // we have hit the end of input and returned eof
-	item      item
-	leftDelim string // start of action marker
+	input      string // the string being scanned
+	pos        Pos    // current position in the input
+	start      Pos    // start position of this item
+	atEOF      bool   // we have hit the end of input and returned eof
+	item       item
+	leftDelim  string // start of action marker
+	rightDelim string // end of action marker
 }
 
 func (l *sqlLexer) next() rune {
@@ -70,6 +71,9 @@ func (l *sqlLexer) nextItem() item {
 func lexSql(l *sqlLexer) stateSqlFn {
 	if strings.HasPrefix(l.input[l.pos:], l.leftDelim) {
 		return l.emit(itemLeftDelim)
+	}
+	if strings.HasPrefix(l.input[l.pos:], l.rightDelim) {
+		return l.emit(itemRightDelim)
 	}
 	switch r := l.next(); {
 	case r == eof:
